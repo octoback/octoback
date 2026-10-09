@@ -11,6 +11,7 @@ type PluginContext struct {
 type PluginVarsService interface {
 	GetVar(string) any
 	SetVar(string, any) error
+	ResolveAccess(any) (map[string]any, error)
 }
 
 // SetVar 设置插件实例状态并持久化。

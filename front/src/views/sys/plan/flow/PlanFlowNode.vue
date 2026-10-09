@@ -2,6 +2,13 @@
   <div :class="['plan-flow-node', `flow-${data.kind}`, 'pointer']">
     <Handle v-if="data.kind === 'plan'" id="left" type="target" :position="Position.Left" />
     <div class="flow-card-title"><Folder v-if="data.kind === 'source'" /><CalendarClock v-if="data.kind === 'plan'" /><Database v-if="data.kind === 'repository'" />{{ data.title }}</div>
+    <button v-if="data.kind === 'repository'" type="button" class="flow-card-detail" title="查看仓库详情" @click.stop="data.onDetail?.()">
+      <ExternalLink :size="13" />
+    </button>
+    <div v-if="data.editMode" class="flow-card-actions">
+      <button type="button" title="编辑" @click.stop="data.onEdit?.()"><Pencil :size="12" /></button>
+      <button type="button" title="删除" @click.stop="data.onDelete?.()"><Trash2 :size="12" /></button>
+    </div>
     <div class="flow-card-meta" :title="data.cron">{{ data.meta }}</div>
     <div
       v-if="data.kind === 'plan'"
@@ -28,9 +35,23 @@ defineOptions({
 });
 
 import { Handle, Position } from "@vue-flow/core";
-import { CalendarClock, Database, Folder } from "lucide-vue-next";
+import { CalendarClock, Database, ExternalLink, Folder, Pencil, Trash2 } from "lucide-vue-next";
 import { Play } from "lucide-vue-next";
-defineProps<{ data: { title: string; meta: string; cron?: string; status?: string; kind: "source" | "plan" | "repository"; subPaths?: Array<{ id: number; path: string }>; onRun?: () => void } }>();
+defineProps<{
+  data: {
+    title: string;
+    meta: string;
+    cron?: string;
+    status?: string;
+    kind: "source" | "plan" | "repository";
+    subPaths?: Array<{ id: number; path: string }>;
+    editMode?: boolean;
+    onRun?: () => void;
+    onDetail?: () => void;
+    onEdit?: () => void;
+    onDelete?: () => void;
+  };
+}>();
 </script>
 <style lang="less">
 .plan-flow-node {
@@ -73,6 +94,50 @@ defineProps<{ data: { title: string; meta: string; cron?: string; status?: strin
   .flow-card-meta {
     font-weight: 450;
     padding-right: 28px;
+  }
+  .flow-card-detail {
+    position: absolute;
+    top: 7px;
+    right: 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    color: #047857;
+    background: rgba(16, 185, 129, 0.1);
+    cursor: pointer;
+  }
+  .flow-card-detail:hover {
+    color: #fff;
+    background: #059669;
+  }
+  .flow-card-actions {
+    position: absolute;
+    top: 7px;
+    right: 9px;
+    display: flex;
+    gap: 3px;
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border: 0;
+      border-radius: 6px;
+      color: #64748b;
+      background: rgba(100, 116, 139, 0.1);
+      cursor: pointer;
+    }
+    button:hover {
+      color: #fff;
+      background: #64748b;
+    }
   }
   &.flow-source .flow-card-title svg {
     color: #2563eb;

@@ -120,10 +120,8 @@ func TestPluginCreateUpdateAndConcurrentMasterKeyInitialization(t *testing.T) {
 	if err := registry.Register(definition); err != nil {
 		t.Fatal(err)
 	}
-	var repositoryActionConfig map[string]any
 	var repositoryExecutor *configCaptureExecutor
 	repositoryDefinition, err := plugin.NewDefinition([]byte("type: repository\nname: repository.test\ntitle: Repository\nversion: 1\nfields:\n  - {key: accessId, title: Access Id, type: number}\n  - {key: path, title: Path, type: string, required: true}\n  - {key: password, title: Password, type: password, encrypt: true, required: true}\nactions:\n  - {name: onBuild}\n"), func(config map[string]any) (plugin.PluginInstance, error) {
-		repositoryActionConfig = config
 		repositoryExecutor = &configCaptureExecutor{config: config}
 		return repositoryExecutor, nil
 	})
@@ -241,22 +239,15 @@ func TestPluginCreateUpdateAndConcurrentMasterKeyInitialization(t *testing.T) {
 	if err != nil {
 		t.Fatalf("repository action: %v", err)
 	}
-	access, ok := result.(map[string]any)["access"].(map[string]any)
-	if !ok || access["pluginName"] != "access.test" || access["config"].(map[string]any)["secret"] != "" {
-		t.Fatalf("repository action access = %#v; repository config = %#v", access, repositoryActionConfig)
-	}
-	if repositoryExecutor.params["access"] == nil {
-		t.Fatal("action parameters must include server-resolved access")
+	if result == nil {
+		t.Fatal("repository action should return a result")
 	}
 	params := map[string]any{"path": "/etc", "access": "untrusted"}
 	if _, err := service.Action(repositoryId, "onBuild", params); err != nil {
 		t.Fatal(err)
 	}
 	if repositoryExecutor.params["path"] != "/etc" || params["access"] != "untrusted" {
-		t.Fatal("action must preserve path and leave caller parameters unchanged")
-	}
-	if _, ok := repositoryExecutor.params["access"].(map[string]any); !ok {
-		t.Fatal("action must replace client access with server-resolved access")
+		t.Fatal("action must preserve form parameters and leave caller parameters unchanged")
 	}
 	if err := service.Delete(id); err == nil {
 		t.Fatal("delete should reject an access instance referenced by a repository")

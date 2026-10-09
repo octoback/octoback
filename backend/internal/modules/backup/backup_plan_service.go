@@ -48,6 +48,12 @@ type BackupPlanPageResult struct {
 	Records []map[string]any `json:"records"`
 	Total   int64            `json:"total"`
 }
+
+// BackupPlanSimple 表示备份计划下拉选项。
+type BackupPlanSimple struct {
+	Id   int64  `json:"id"`
+	Name string `json:"name"`
+}
 type BackupLogPageQuery struct {
 	Offset int64 `json:"offset"`
 	Limit  int64 `json:"limit"`
@@ -104,6 +110,18 @@ func (s *BackupPlanService) validate(in *BackupPlanInput) error {
 		return error_.NewTextError("存储仓库不存在: %d", in.RepositoryId)
 	}
 	return nil
+}
+
+// List 返回全部备份计划的轻量选项数据。
+func (s *BackupPlanService) List() ([]BackupPlanSimple, error) {
+	var rows []BackupPlanSimple
+	if err := s.svcCtx.Db.Model(&models.BackupPlan{}).Select("id, name").Order("name asc, id asc").Find(&rows).Error; err != nil {
+		return nil, error_.NewApiError(err)
+	}
+	if rows == nil {
+		rows = make([]BackupPlanSimple, 0)
+	}
+	return rows, nil
 }
 
 func normalizeRepoTag(value string) (string, error) {

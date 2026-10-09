@@ -1,6 +1,7 @@
 import { CreateCrudOptionsRet, dict } from "@fast-crud/fast-crud";
 import { Modal } from "ant-design-vue";
 import { h } from "vue";
+import { getBackupPlanList } from "../api";
 import { getBackupRunLog, getBackupRunPage, type BackupLog } from "../api";
 export default function (): CreateCrudOptionsRet<BackupLog> {
   const openRepository = (row: BackupLog) => {
@@ -37,7 +38,15 @@ export default function (): CreateCrudOptionsRet<BackupLog> {
   };
   return {
     crudOptions: {
-      request: { pageRequest: ({ query }: any) => getBackupRunPage({ offset: query.offset, limit: query.limit, planId: query.query?.planId }) },
+      request: {
+        pageRequest: ({ query, page }: any) => {
+          return getBackupRunPage({
+            offset: page.offset,
+            limit: page.limit,
+            planId: query?.planId
+          });
+        }
+      },
       rowHandle: {
         fixed: "right",
         width: 90,
@@ -66,7 +75,18 @@ export default function (): CreateCrudOptionsRet<BackupLog> {
       },
       columns: {
         id: { title: "ID", type: "text", column: { width: 70 } },
-        planName: { title: "备份计划", type: "text", search: { show: true }, column: { width: 150 } },
+        planId: {
+          title: "备份计划",
+          type: "dict-select",
+          search: { show: true },
+          dict: dict({
+            value: "id",
+            label: "name",
+            getData: async () => getBackupPlanList()
+          }),
+          column: { show: false }
+        },
+        planName: { title: "备份计划", type: "text", column: { width: 150 } },
         status: {
           title: "状态",
           type: "dict-select",

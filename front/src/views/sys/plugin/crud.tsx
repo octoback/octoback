@@ -1,16 +1,6 @@
 import { AddReq, compute, CreateCrudOptionsProps, CreateCrudOptionsRet, DelReq, dict, EditReq } from "@fast-crud/fast-crud";
 import { usePluginDefineStore } from "/src/store/modules/plugin-define";
-import {
-  createPluginInstance,
-  deletePluginInstance,
-  executePluginInstanceAction,
-  getPluginInstanceInfo,
-  getPluginInstancePage,
-  type PluginField,
-  type PluginInstance,
-  type PluginMetadata,
-  updatePluginInstance
-} from "./plugin-api";
+import { createPluginInstance, deletePluginInstance, getPluginInstanceInfo, getPluginInstancePage, type PluginField, type PluginInstance, type PluginMetadata, updatePluginInstance } from "./plugin-api";
 
 export type PluginCrudContext = { pluginType: string; pluginName?: string; metadata: PluginMetadata[] };
 
@@ -112,44 +102,27 @@ export default function ({ context, crudExpose }: CreateCrudOptionsProps<PluginI
       return;
     }
     (define.fields || []).forEach((field, index) => {
-      const key = "config." + field.key;
       const component = getComponent(field);
+      const isActionComponent = component.name === "plugin-test-button";
+      const key = isActionComponent ? "__pluginField_" + field.key : "config." + field.key;
       const fieldColumn: Record<string, any> = {
         title: field.title,
         type: field.type || "text",
-        key,
         order: 10,
         ...field,
+        key,
         component,
         form: field.helper ? { helper: field.helper } : undefined
       };
+      if (isActionComponent) {
+        fieldColumn.form = { show: true };
+      }
       if (field.options?.length && component.name === "a-select") {
         fieldColumn.form.component = { ...component, options: field.options };
       }
       formColumns[key] = fieldColumn;
       dynamicFieldKeys.add(key);
     });
-    if (pluginType === "access") {
-      const key = "__pluginTest";
-      formColumns[key] = {
-        title: "测试",
-        type: "text",
-        key,
-        order: 99,
-        component: {
-          name: "fs-button",
-          type: "primary",
-          text: "测试连接",
-          on: {
-            click: async () => {
-              if (!form.id) return;
-              await executePluginInstanceAction(form.id, "onTest");
-            }
-          }
-        }
-      };
-      dynamicFieldKeys.add(key);
-    }
     console.log('crudBinding.value[mode + "Form"].columns', formColumns);
   }
 

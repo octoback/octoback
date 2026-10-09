@@ -46,14 +46,19 @@ func (e *SshSource) onListPaths(ctx context.Context, form map[string]any) (any, 
 	if e.AccessId <= 0 {
 		return nil, error_.NewTextError("SSH 授权 Id 不能为空")
 	}
-	access, ok := form["access"].(map[string]any)
+	if e.PluginContext == nil || e.PluginContext.PluginService == nil {
+		return nil, error_.NewTextError("插件上下文未绑定服务")
+	}
+	accessId := form["accessId"]
+	access, err := e.PluginContext.PluginService.ResolveAccess(accessId)
+	if err != nil {
+		return nil, error_.NewWrapError("加载 SSH 授权配置失败", err)
+	}
+	_, ok := access["config"].(map[string]any)
 	if !ok {
 		return nil, error_.NewTextError("SSH 授权配置不存在")
 	}
-	config, ok := access["config"].(map[string]any)
-	if !ok {
-		return nil, error_.NewTextError("SSH 授权配置无效")
-	}
+	config := access["config"].(map[string]any)
 	definition, err := (sshaccess.Provider{}).Definition()
 	if err != nil {
 		return nil, error_.NewWrapError("加载 SSH 授权插件定义失败", err)

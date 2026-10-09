@@ -111,6 +111,9 @@ func NewDefinition(data []byte, instanceFactory any) (*Definition, error) {
 func newReflectedPlugin(typ reflect.Type, ctx *PluginContext, config map[string]any) (PluginInstance, error) {
 	value := reflect.New(typ.Elem())
 	for key, raw := range config {
+		if raw == nil || (reflect.ValueOf(raw).Kind() == reflect.String && strings.TrimSpace(reflect.ValueOf(raw).String()) == "") {
+			continue
+		}
 		for i := 0; i < value.Elem().NumField(); i++ {
 			field := value.Elem().Type().Field(i)
 			if strings.EqualFold(field.Name, key) && value.Elem().Field(i).CanSet() {
@@ -147,6 +150,9 @@ func pluginFactory(factory any) (NewPluginInstance, error) {
 	return func(config map[string]any) (PluginInstance, error) {
 		value := reflect.New(typ.Elem())
 		for key, raw := range config {
+			if raw == nil || (reflect.ValueOf(raw).Kind() == reflect.String && strings.TrimSpace(reflect.ValueOf(raw).String()) == "") {
+				continue
+			}
 			for fieldIndex := 0; fieldIndex < value.Elem().NumField(); fieldIndex++ {
 				field := value.Elem().Type().Field(fieldIndex)
 				if !strings.EqualFold(field.Name, key) || !value.Elem().Field(fieldIndex).CanSet() {

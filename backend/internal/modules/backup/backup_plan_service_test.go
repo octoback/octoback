@@ -1,6 +1,46 @@
 package logic
 
-import "testing"
+import (
+	"context"
+	"handfree-work/octo-backup/internal/base/db_"
+	"handfree-work/octo-backup/internal/models"
+	"handfree-work/octo-backup/internal/svc"
+	"path/filepath"
+	"testing"
+)
+
+func TestPlanSimpleList(t *testing.T) {
+	database, err := db_.OpenSQLite(filepath.Join(t.TempDir(), "plans.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDb, err := database.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDb.Close() })
+	if err := database.AutoMigrate(&models.BackupPlan{}); err != nil {
+		t.Fatal(err)
+	}
+	service := NewBackupPlanService(context.Background(), &svc.ServiceContext{Db: database})
+	empty, err := service.List()
+	if err != nil || empty == nil || len(empty) != 0 {
+		t.Fatalf("空列表: %v %v", empty, err)
+	}
+	for _, name := range []string{"计划甲", "计划乙"} {
+		row := models.BackupPlan{Name: name, RepoTag: name}
+		if err := database.Create(&row).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, err := service.List()
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("全部计划: %v %v", rows, err)
+	}
+	if rows[0].Name != "计划乙" || rows[0].Id == 0 {
+		t.Fatalf("选项内容错误: %v", rows)
+	}
+}
 
 func TestNormalizeRepoTag(t *testing.T) {
 	tests := []struct {

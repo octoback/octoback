@@ -4,13 +4,14 @@ title: SSH 主机授权
 description: SSH 主机连接授权
 version: 1.0.0
 fields:
-  - {key: host, title: 主机, type: string, required: true}
-  - {key: port, title: 端口, type: number, default: 22}
-  - {key: username, title: 用户名, type: string, required: true}
-  - {key: password, title: 密码, type: password, encrypt: true}
-  - {key: privateKey, title: 私钥登录, type: textarea, encrypt: true, component: {name: plugin-file-input, placeholder: "选择私钥文件或直接粘贴"}}
-  - {key: privateKeyPassword, title: 私钥密码, type: password, encrypt: true, placeholder: "如果私钥有密码请填写"}
-  - {key: timeout, title: 超时时间, type: number, default: 30, placeholder: "执行命令的超时时间，单位秒"}
-  - {key: jumpAccessId, title: 跳板机 SSH 授权, type: number, component: {name: access-selector}, mergeScript: 'return { component: { pluginName: "access.ssh", placeholder: "目标主机不可直连时选择" } }'}
+  - {key: host, title: 主机, type: string, required: true, helper: 填写 SSH 服务器的主机名或 IP 地址。}
+  - {key: port, title: 端口, type: number, default: 22, helper: SSH 服务端口，默认 22。}
+  - {key: username, title: 用户名, type: string, required: true, helper: 填写用于登录 SSH 服务器的系统用户名。}
+  - {key: password, title: 密码, type: password, encrypt: true, helper: 使用密码认证时填写；也可以改用私钥认证。}
+  - {key: privateKey, title: 私钥登录, type: textarea, encrypt: true, helper: 使用私钥认证时选择私钥文件或粘贴私钥内容；密码认证可留空。, component: {name: plugin-file-input, placeholder: "选择文件或直接粘贴私钥内容"}}
+  - {key: privateKeyPassword, title: 私钥密码, type: password, encrypt: true, placeholder: "如果私钥有密码请填写", helper: 私钥受口令保护时填写；未设置私钥口令可留空。}
+  - {key: timeout, title: 超时时间（秒）, type: number, default: 30, helper: SSH 连接和远程命令的超时时间，单位为秒，默认 30 秒。}
+  - {key: jumpAccessId, title: 跳板机 SSH 授权, type: number, helper: 目标主机无法直接连接时选择跳板机授权；可直连时留空。, component: {name: access-selector}, mergeScript: 'return { component: { pluginName: "access.ssh", placeholder: "目标主机不可直连时选择" } }'}
+  - {key: testButton, title: 测试连接, type: text, component: {name: plugin-test-button, action: onTest, text: 测试连接}}
 actions:
   - {name: onTest, title: 测试连接, permission: write}

@@ -15,6 +15,7 @@ func RegisterBackupPlan(app *fiber.App, s *svc.ServiceContext) {
 	r := app.Group("/api/plan")
 	web_.RegisterRoutes(r, s.Auth,
 		web_.Route{Path: "/page", Permission: web_.Read, Handler: web_.HandleJSON(backupPlanPage(s))},
+		web_.Route{Path: "/list", Permission: web_.Read, Handler: web_.Handle(backupPlanList(s))},
 		web_.Route{Path: "/info", Permission: web_.Read, Handler: web_.Handle(backupPlanInfo(s))},
 		web_.Route{Path: "/create", Permission: web_.Write, Handler: web_.HandleJSON(backupPlanCreate(s))},
 		web_.Route{Path: "/update", Permission: web_.Write, Handler: web_.HandleJSON(backupPlanUpdate(s))},
@@ -24,6 +25,11 @@ func RegisterBackupPlan(app *fiber.App, s *svc.ServiceContext) {
 		web_.Route{Path: "/run/log", Permission: web_.Read, Handler: web_.Handle(backupPlanLogContent(s))},
 		web_.Route{Path: "/run/page", Permission: web_.Read, Handler: web_.HandleJSON(backupPlanLogPage(s))},
 	)
+}
+func backupPlanList(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
+	return func(c fiber.Ctx) (any, error) {
+		return logic.NewBackupPlanService(c.Context(), s).List()
+	}
 }
 func backupPlanLogContent(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 	return func(c fiber.Ctx) (any, error) {

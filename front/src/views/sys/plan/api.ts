@@ -29,6 +29,7 @@ export interface BackupPlan {
   lastRunAt?: number;
 }
 export const getBackupPlanPage = (data: Record<string, unknown> = {}) => request({ url: "/plan/page", method: "post", data });
+export const getBackupPlanList = () => request({ url: "/plan/list", method: "post", data: {} });
 export const getBackupPlanInfo = (id: number) => request({ url: `/plan/info?id=${id}`, method: "post", data: {} });
 export const createBackupPlan = (data: Partial<BackupPlan>) => request({ url: "/plan/create", method: "post", data });
 export const updateBackupPlan = (id: number, data: Partial<BackupPlan>) => request({ url: `/plan/update?id=${id}`, method: "post", data });

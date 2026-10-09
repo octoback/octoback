@@ -436,24 +436,6 @@ func (s *PluginInstanceService) Action(id int64, action string, params map[strin
 	if err != nil {
 		return nil, err
 	}
-	actionParams := make(map[string]any, len(params)+1)
-	for key, value := range params {
-		actionParams[key] = value
-	}
-	if definition.Metadata.Type == plugin.TypeRepository || definition.Metadata.Type == plugin.TypeSource {
-		accessId := config["accessId"]
-		if params != nil && (accessId == nil || strings.TrimSpace(fmt.Sprint(accessId)) == "") {
-			accessId = params["accessId"]
-		}
-		if accessId != nil && strings.TrimSpace(fmt.Sprint(accessId)) != "" {
-			access, err := s.resolveAccess(accessId)
-			if err != nil {
-				return nil, err
-			}
-			config["access"] = access
-			actionParams["access"] = access
-		}
-	}
 	vars := map[string]any{}
 	if strings.TrimSpace(row.Vars) != "" {
 		if err := yaml.Unmarshal([]byte(row.Vars), &vars); err != nil {
@@ -466,7 +448,7 @@ func (s *PluginInstanceService) Action(id int64, action string, params map[strin
 	if err != nil {
 		return nil, error_.NewWrapError(fmt.Sprintf("插件 %s 实例化失败", row.PluginName), err)
 	}
-	result, err := instance.ExecuteAction(s.ctx, action, actionParams)
+	result, err := instance.ExecuteAction(s.ctx, action, params)
 	if err != nil {
 		return nil, error_.NewWrapError(fmt.Sprintf("插件 %s action %s 执行失败", row.PluginName, action), err)
 	}
@@ -498,6 +480,11 @@ func (s *PluginInstanceService) resolveAccess(value any) (map[string]any, error)
 		return nil, err
 	}
 	return map[string]any{"id": row.Id, "name": row.Name, "pluginName": row.PluginName, "config": config}, nil
+}
+
+// ResolveAccess 根据授权 Id 返回解密后的授权实例配置，供插件 action 复用。
+func (s *PluginInstanceService) ResolveAccess(value any) (map[string]any, error) {
+	return s.resolveAccess(value)
 }
 
 func (s *PluginInstanceService) Delete(id int64) error {

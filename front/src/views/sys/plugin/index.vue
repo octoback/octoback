@@ -32,6 +32,12 @@ const loading = ref(true);
 const errorMessage = ref("");
 const { crudBinding, crudRef } = useFsRef();
 const pluginDefineStore = usePluginDefineStore();
+const exposedCrud = ref<any>();
+defineExpose({
+  openAdd: async () => exposedCrud.value?.openAdd({ row: {} }),
+  openEdit: async (row: any) => exposedCrud.value?.openEdit({ row }),
+  remove: async (row: any) => exposedCrud.value?.doRemove({ row })
+});
 
 onMounted(async () => {
   try {
@@ -44,6 +50,7 @@ onMounted(async () => {
       createCrudOptions,
       context: { pluginType: props.pluginType, metadata: metadata.value }
     });
+    exposedCrud.value = crudExpose;
     await crudExpose.doRefresh();
   } catch (error: any) {
     errorMessage.value = error?.message || "加载插件定义失败";

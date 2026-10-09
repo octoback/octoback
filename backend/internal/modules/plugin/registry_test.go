@@ -12,6 +12,14 @@ import (
 
 type testPlugin struct{}
 
+type numericConfigPlugin struct {
+	Port int
+}
+
+func (numericConfigPlugin) ExecuteAction(context.Context, string, map[string]any) (any, error) {
+	return nil, nil
+}
+
 func (testPlugin) ExecuteAction(_ context.Context, action string, _ map[string]any) (any, error) {
 	if action == "onTest" {
 		return map[string]any{"ok": true}, nil
@@ -36,6 +44,24 @@ func TestGenericBuildActionDoesNotReturnPluginConfig(t *testing.T) {
 	}
 	if reflect.DeepEqual(got, map[string]any{"password": "secret"}) {
 		t.Fatalf("onBuild exposed plugin config: %#v", got)
+	}
+}
+
+func TestRegistrySkipsEmptyOptionalNumericConfig(t *testing.T) {
+	definition, err := plugin.NewDefinition([]byte("type: access\nname: access.numeric\ntitle: Numeric\nversion: 1.0.0\n"), &numericConfigPlugin{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := plugin.NewRegistry()
+	if err := registry.Register(definition); err != nil {
+		t.Fatal(err)
+	}
+	instance, err := registry.NewInstance("access.numeric", map[string]any{"port": ""})
+	if err != nil {
+		t.Fatalf("empty numeric config should be ignored: %v", err)
+	}
+	if instance.(*numericConfigPlugin).Port != 0 {
+		t.Fatalf("empty numeric config changed default value: %#v", instance)
 	}
 }
 
