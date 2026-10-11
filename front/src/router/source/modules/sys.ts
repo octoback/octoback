@@ -39,7 +39,7 @@ export const sysResources = [
       },
       { title: "仓库详情", name: "repository-detail", meta: { hideInMenu: true, permission: "read" }, path: "/sys/repository/:id", component: "/sys/repository/detail.vue" },
       {
-        title: "备份来源",
+        title: "数据资源",
         name: "source",
         meta: { icon: "ion:folder-open-outline", permission: "read" },
         path: "/sys/source",

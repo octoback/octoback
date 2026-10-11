@@ -1,7 +1,7 @@
 <template>
   <fs-page class="component-plan">
     <template #header>
-      <div class="title">备份计划 <span class="sub">管理备份来源、调度和存储仓库</span></div>
+      <div class="title">备份计划 <span class="sub">管理数据资源、调度和存储仓库</span></div>
     </template>
     <fs-crud ref="crudRef" v-bind="crudBinding" />
   </fs-page>

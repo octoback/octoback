@@ -10,16 +10,25 @@
       </div>
     </template>
     <div class="canvas-shell">
-      <div class="embedded-crud"><PluginCrud ref="sourceCrud" plugin-type="source" /><PluginCrud ref="repositoryCrud" plugin-type="repository" /></div>
+      <div class="embedded-crud">
+        <PluginCrud ref="sourceCrud" plugin-type="source" />
+        <PluginCrud ref="repositoryCrud" plugin-type="repository" />
+        <fs-crud ref="planCrudRef" v-bind="planCrudBinding" />
+      </div>
       <div class="zone-bar">
         <div>
-          <b>来源</b><a-button v-if="editMode" type="text" title="新增来源" @click="openPluginAdd('source')"><Plus :size="14" /></a-button>
+          <b>来源</b>
+          <a-button v-if="editMode" size="small" type="primary" title="新增来源" @click="openPluginAdd('source')">
+            <Plus :size="14" />
+          </a-button>
         </div>
         <div>
-          <b>计划</b><a-button v-if="editMode" type="text" title="新增计划" @click="openPlanAdd"><Plus :size="14" /></a-button>
+          <b>计划</b>
+          <a-button v-if="editMode" size="small" type="primary" title="新增计划" @click="openPlanAdd"><Plus :size="14" /></a-button>
         </div>
         <div>
-          <b>仓库</b><a-button v-if="editMode" type="text" title="新增仓库" @click="openPluginAdd('repository')"><Plus :size="14" /></a-button>
+          <b>仓库</b>
+          <a-button v-if="editMode" size="small" type="primary" title="新增仓库" @click="openPluginAdd('repository')"><Plus :size="14" /></a-button>
         </div>
       </div>
       <VueFlow v-model:nodes="nodes" v-model:edges="edges" :node-types="nodeTypes" class="flow-canvas">
@@ -33,7 +42,7 @@ defineOptions({
   name: "BackupPlanFlow"
 });
 
-import { nextTick, ref } from "vue";
+import { nextTick, ref, watch } from "vue";
 import { VueFlow, useVueFlow, type Edge, type Node } from "@vue-flow/core";
 import { useFs } from "@fast-crud/fast-crud";
 import { Background } from "@vue-flow/background";
@@ -59,7 +68,7 @@ const { setCenter } = useVueFlow();
 const nodeTypes = { flow: PlanFlowNode };
 const runStates = ref<Record<number, { status: string; progress: number; stage: string; error?: string }>>({});
 const editMode = ref(false);
-const { crudExpose: planCrudExpose } = useFs({ createCrudOptions: createPlanCrudOptions });
+const { crudBinding: planCrudBinding, crudRef: planCrudRef, crudExpose: planCrudExpose } = useFs({ createCrudOptions: createPlanCrudOptions });
 const sourceCrud = ref<any>();
 const repositoryCrud = ref<any>();
 function openPluginAdd(kind: "source" | "repository") {
@@ -133,7 +142,7 @@ function makeGraph() {
   const repositoryGap = 18;
   const repositoryHeights = repositories.value.map((repository) => {
     const pathCount = plans.value.filter((plan) => plan.repositoryId === Number(repository.id)).length;
-    return 50 + (5 + pathCount * 18);
+    return 50 + (15 + pathCount * 18);
   });
   const repositoryTotalHeight = repositoryHeights.reduce((totalHeight, nodeHeight) => totalHeight + nodeHeight, 0) + Math.max(0, repositories.value.length - 1) * repositoryGap;
   let repositoryPositionY = centerPositionY - repositoryTotalHeight / 2;
@@ -260,6 +269,9 @@ async function loadFlow() {
   repositories.value = repositoryPage.records || [];
   makeGraph();
 }
+watch(editMode, () => {
+  makeGraph();
+});
 loadFlow();
 </script>
 <style lang="less">
@@ -334,6 +346,9 @@ loadFlow();
     border-radius: 6px;
     color: #64748b;
     background: rgba(100, 116, 139, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .zone-bar .ant-btn:hover {
     color: #fff;

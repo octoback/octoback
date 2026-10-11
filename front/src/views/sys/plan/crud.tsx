@@ -1,5 +1,4 @@
 import { AddReq, CreateCrudOptionsRet, DelReq, EditReq, dict } from "@fast-crud/fast-crud";
-import { getPluginInstancePage } from "/src/views/sys/plugin/plugin-api";
 import { createBackupPlan, deleteBackupPlan, getBackupPlanInfo, getBackupPlanPage, updateBackupPlan, type BackupPlan } from "./api";
 function policyFromPlan(plan: BackupPlan) {
   return { ...plan, retentionPolicy: plan.keepPolicy || { type: "none", value: {} } };
@@ -10,15 +9,6 @@ function planFromForm(form: any) {
   delete result.retentionPolicy;
   return result;
 }
-const instanceDict = (pluginType: string) =>
-  dict({
-    value: "id",
-    label: "name",
-    getData: async () => {
-      const page = await getPluginInstancePage({ pluginType, offset: 0, limit: 1000 });
-      return page.records;
-    }
-  });
 export default function (): CreateCrudOptionsRet<BackupPlan> {
   return {
     crudOptions: {
@@ -42,8 +32,12 @@ export default function (): CreateCrudOptionsRet<BackupPlan> {
       columns: {
         id: { title: "ID", type: "text", form: { show: false } },
         name: { title: "计划名称", type: "text", search: { show: true }, form: { helper: "备份计划名称", rules: [{ required: true, message: "请输入名称" }] } },
-        sourceId: { title: "备份来源", type: "dict-select", dict: instanceDict("source"), form: { helper: "备份数据来源", rules: [{ required: true, message: "请选择备份来源" }] } },
-        repositoryId: { title: "存储仓库", type: "dict-select", dict: instanceDict("repository"), form: { helper: "备份数据存储到哪个仓库", rules: [{ required: true, message: "请选择存储仓库" }] } },
+        sourceId: { title: "数据资源", type: "text", form: { component: { name: "source-selector", vModel: "modelValue" }, helper: "备份数据来源", rules: [{ required: true, message: "请选择数据资源" }] } },
+        repositoryId: {
+          title: "存储仓库",
+          type: "text",
+          form: { component: { name: "repository-selector", vModel: "modelValue" }, helper: "备份数据存储到哪个仓库", rules: [{ required: true, message: "请选择存储仓库" }] }
+        },
         repoTag: { title: "仓库标签", type: "text", form: { component: { placeholder: "可选，用于区分同一仓库中的备份" }, helper: "使用 Restic 标签区分备份计划" } },
         retentionPolicy: {
           title: "保留策略",

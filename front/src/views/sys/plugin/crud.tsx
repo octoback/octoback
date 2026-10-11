@@ -29,6 +29,16 @@ function getComponent(field: PluginField): Record<string, unknown> {
 
 export default function ({ context, crudExpose }: CreateCrudOptionsProps<PluginInstance, PluginCrudContext>): CreateCrudOptionsRet<PluginInstance> {
   const { metadata, pluginType } = context;
+  let pluginTypeTitle = "插件类型";
+  if (pluginType === "access") {
+    pluginTypeTitle = "授权类型";
+  }
+  if (pluginType === "repository") {
+    pluginTypeTitle = "存储类型";
+  }
+  if (pluginType === "source") {
+    pluginTypeTitle = "资源类型";
+  }
   const pluginDefineStore = usePluginDefineStore();
   const dynamicFieldKeys = new Set<string>();
   const goRepository = (row: PluginInstance) => (window.location.hash = `#/sys/repository/${row.id}`);
@@ -56,7 +66,7 @@ export default function ({ context, crudExpose }: CreateCrudOptionsProps<PluginI
       form: { order: -11, rules: [{ required: true, message: "请输入名称" }] }
     },
     pluginName: {
-      title: "插件类型",
+      title: pluginTypeTitle,
       type: "dict-select",
       order: -10,
       dict: dict({
@@ -69,7 +79,7 @@ export default function ({ context, crudExpose }: CreateCrudOptionsProps<PluginI
       editForm: { component: { disabled: true } },
       form: {
         order: -10,
-        rules: [{ required: true, message: "请选择插件类型" }],
+        rules: [{ required: true, message: `请选择${pluginTypeTitle}` }],
         component: {
           showSearch: true,
           on: {

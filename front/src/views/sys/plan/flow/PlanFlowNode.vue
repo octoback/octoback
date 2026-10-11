@@ -1,25 +1,35 @@
 <template>
   <div :class="['plan-flow-node', `flow-${data.kind}`, 'pointer']">
     <Handle v-if="data.kind === 'plan'" id="left" type="target" :position="Position.Left" />
-    <div class="flow-card-title"><Folder v-if="data.kind === 'source'" /><CalendarClock v-if="data.kind === 'plan'" /><Database v-if="data.kind === 'repository'" />{{ data.title }}</div>
-    <button v-if="data.kind === 'repository'" type="button" class="flow-card-detail" title="查看仓库详情" @click.stop="data.onDetail?.()">
-      <ExternalLink :size="13" />
-    </button>
-    <div v-if="data.editMode" class="flow-card-actions">
-      <button type="button" title="编辑" @click.stop="data.onEdit?.()"><Pencil :size="12" /></button>
-      <button type="button" title="删除" @click.stop="data.onDelete?.()"><Trash2 :size="12" /></button>
+    <div class="flow-card-row">
+      <div class="flow-card-title">
+        <Folder v-if="data.kind === 'source'" />
+        <CalendarClock v-if="data.kind === 'plan'" />
+        <Database v-if="data.kind === 'repository'" />
+        <span>{{ data.title }}</span>
+      </div>
+      <button v-if="data.kind === 'repository' && !data.editMode" type="button" class="flow-card-detail" title="查看仓库详情" @click.stop="data.onDetail?.()">
+        <ExternalLink :size="13" />
+      </button>
+      <div v-if="data.editMode" class="flow-card-actions">
+        <button type="button" title="编辑" @click.stop="data.onEdit?.()"><Pencil :size="12" /></button>
+        <button type="button" title="删除" @click.stop="data.onDelete?.()"><Trash2 :size="12" /></button>
+      </div>
+      <span
+        v-if="data.kind === 'plan' && !data.editMode"
+        class="flow-card-status"
+        :class="{ 'is-running': data.status?.includes('备份中') || data.status?.includes('排队'), 'is-success': data.status === '运行成功', 'is-failed': data.status === '运行失败' }"
+      >
+        {{ data.status }}
+      </span>
     </div>
-    <div class="flow-card-meta" :title="data.cron">{{ data.meta }}</div>
-    <div
-      v-if="data.kind === 'plan'"
-      class="flow-card-status"
-      :class="{ 'is-running': data.status?.includes('备份中') || data.status?.includes('排队'), 'is-success': data.status === '运行成功', 'is-failed': data.status === '运行失败' }"
-    >
-      {{ data.status }}
+
+    <div class="flow-card-row flow-card-info-row mt-1">
+      <div class="flow-card-meta" :title="data.cron">{{ data.meta }}</div>
+      <button v-if="data.kind === 'plan'" type="button" class="flow-card-run" title="立即执行" @click.stop="data.onRun?.()">
+        <Play :size="12" />
+      </button>
     </div>
-    <button v-if="data.kind === 'plan'" type="button" class="flow-card-run" title="立即执行" @click.stop="data.onRun?.()">
-      <Play :size="12" />
-    </button>
     <Handle v-if="data.kind === 'source' || data.kind === 'plan'" id="right" type="source" :position="Position.Right" />
     <div v-if="data.kind === 'repository'" class="flow-card-paths">
       <div v-for="subPath in data.subPaths" :key="subPath.id" class="flow-card-path">
@@ -78,11 +88,19 @@ defineProps<{
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .flow-card-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    gap: 8px;
+  }
   .flow-card-title {
     display: flex;
     align-items: center;
     gap: 7px;
-    padding-right: 48px;
+    flex: 1 1 auto;
+    min-width: 0;
     font-weight: 650;
     svg {
       width: 15px;
@@ -93,12 +111,10 @@ defineProps<{
 
   .flow-card-meta {
     font-weight: 450;
-    padding-right: 28px;
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .flow-card-detail {
-    position: absolute;
-    top: 7px;
-    right: 9px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -110,16 +126,15 @@ defineProps<{
     color: #047857;
     background: rgba(16, 185, 129, 0.1);
     cursor: pointer;
+    flex: 0 0 auto;
   }
   .flow-card-detail:hover {
     color: #fff;
     background: #059669;
   }
   .flow-card-actions {
-    position: absolute;
-    top: 7px;
-    right: 9px;
     display: flex;
+    flex: 0 0 auto;
     gap: 3px;
     button {
       display: inline-flex;
@@ -149,7 +164,6 @@ defineProps<{
     color: #059669;
   }
   .flow-card-meta {
-    margin-top: 3px;
     color: #718096;
     font-size: 11px;
   }
@@ -177,10 +191,8 @@ defineProps<{
     background: #10b981;
   }
   .flow-card-status {
-    position: absolute;
-    top: 7px;
-    right: 9px;
     display: inline-flex;
+    flex: 0 0 auto;
     padding: 1px 7px;
     border-radius: 999px;
     color: #6d28d9;
@@ -206,9 +218,6 @@ defineProps<{
     background: rgba(100, 116, 139, 0.12);
   }
   .flow-card-run {
-    position: absolute;
-    right: 9px;
-    bottom: 7px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -220,6 +229,7 @@ defineProps<{
     color: #7c3aed;
     background: rgba(139, 92, 246, 0.1);
     cursor: pointer;
+    flex: 0 0 auto;
   }
   .flow-card-run:hover {
     color: #fff;
