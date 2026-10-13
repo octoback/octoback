@@ -4,7 +4,9 @@
 @import './transition.less';
 @import './fix-windicss.less';
 @import './antdv4.less';
-html, body {
+
+html,
+body {
   margin: 0;
   padding: 0;
   height: 100%;
@@ -12,20 +14,26 @@ html, body {
   box-sizing: border-box;
 }
 
-body{
+body {
   //min-width: 1000px;
 }
+
 div#app {
   height: 100%
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   margin-bottom: 0;
 }
 
-.fs-desc{
+.fs-desc {
   font-size: 12px;
-  color:#888888;
+  color: #888888;
   margin-left: 5px;
   margin-right: 5px;
 }
@@ -48,25 +56,43 @@ h1, h2, h3, h4, h5, h6 {
 
 
 
-.ml-5{
-  margin-left:5px;
-}
-.mt-5{
-  margin-top:5px;
-}
-.mt-10{
-  margin-top:10px;
+.ml-5 {
+  margin-left: 5px;
 }
 
-.m-10{
-  margin:10px;
+.mt-5 {
+  margin-top: 5px;
 }
 
-.p-5{
-  padding:5px;
+.mt-10 {
+  margin-top: 10px;
 }
 
-.helper{
+.m-10 {
+  margin: 10px;
+}
+
+.p-5 {
+  padding: 5px;
+}
+
+.helper {
   font-size: 12px;
-  color:#888888;
+  color: #888888;
+}
+
+
+.fs-table-select {
+  display: flex;
+  align-items: center;
+
+  &.ant-btn.ant-btn-text {
+    display: flex;
+    align-items: center;
+  }
+}
+
+.flex-col{
+  flex-direction: column;
+  display: flex;
 }

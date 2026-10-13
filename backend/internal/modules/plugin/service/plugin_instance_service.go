@@ -18,7 +18,10 @@ import (
 	backup "handfree-work/octo-backup/internal/modules/backup/restic"
 	"handfree-work/octo-backup/internal/modules/plugin"
 	"handfree-work/octo-backup/internal/modules/plugin/secret"
+	aliyunaccess "handfree-work/octo-backup/internal/plugins/access/aliyun"
 	sshaccess "handfree-work/octo-backup/internal/plugins/access/ssh"
+	aliossrepository "handfree-work/octo-backup/internal/plugins/repository/alioss"
+	sftprepository "handfree-work/octo-backup/internal/plugins/repository/sftp"
 	"handfree-work/octo-backup/internal/svc"
 )
 
@@ -119,13 +122,18 @@ func (s *PluginInstanceService) Update(id int64, in *PluginInstanceInput) (map[s
 			}
 		}
 		if row.PluginType == string(plugin.TypeRepository) {
-			if password, ok := existing["password"].(string); ok && strings.TrimSpace(password) != "" {
-				if incoming, ok := in.Config["password"].(string); ok {
-					if strings.TrimSpace(incoming) != "" && incoming != maskSecret(password) {
-						return nil, error_.NewTextError("存储仓库密码设置后不可修改")
-					}
-					in.Config["password"] = maskSecret(password)
+			for _, field := range definition.Metadata.Fields {
+				if !field.Encrypt {
+					continue
 				}
+				password, exists := existing[field.Key].(string)
+				if !exists || strings.TrimSpace(password) == "" {
+					continue
+				}
+				if incoming, exists := in.Config[field.Key].(string); exists && strings.TrimSpace(incoming) != "" && incoming != maskSecret(password) {
+					return nil, error_.NewTextError("存储仓库敏感配置设置后不可修改: %s", field.Title)
+				}
+				in.Config[field.Key] = maskSecret(password)
 			}
 		}
 		config := mergePluginConfig(existing, in.Config, definition.Metadata.Fields)
@@ -165,7 +173,7 @@ func (s *PluginInstanceService) Snapshots(id int64) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return data["snapshots"], nil
+	return s.attachSnapshotAssociations(id, data["snapshots"]), nil
 }
 
 // RepositoryStats 查询整个仓库的实际数据统计。
@@ -187,6 +195,7 @@ func (s *PluginInstanceService) RefreshRepositoryData(id int64, summary map[stri
 	if err != nil {
 		return nil, error_.NewWrapError("刷新仓库快照缓存失败", err)
 	}
+	snapshots = s.attachSnapshotAssociations(id, snapshots)
 	stats, err := client.Stats(s.ctx)
 	if err != nil {
 		return nil, error_.NewWrapError("刷新仓库统计缓存失败", err)
@@ -212,6 +221,43 @@ func (s *PluginInstanceService) RefreshRepositoryData(id int64, summary map[stri
 	return data, nil
 }
 
+// attachSnapshotAssociations 将备份记录中的业务关联补充到 Restic 快照元数据。
+func (s *PluginInstanceService) attachSnapshotAssociations(repositoryId int64, value any) any {
+	items, ok := value.([]any)
+	if !ok {
+		return value
+	}
+	associations := make(map[string]models.BackupLog)
+	var logs []models.BackupLog
+	if s.svcCtx.Db.Where("repository_id = ? AND snapshot_id <> ''", repositoryId).Find(&logs).Error == nil {
+		for _, row := range logs {
+			if row.SnapshotId != nil && strings.TrimSpace(*row.SnapshotId) != "" {
+				associations[*row.SnapshotId] = row
+			}
+		}
+	}
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		snapshotId := strings.TrimSpace(fmt.Sprint(entry["id"]))
+		if snapshotId == "" {
+			snapshotId = strings.TrimSpace(fmt.Sprint(entry["snapshot_id"]))
+		}
+		entry["repositoryId"] = repositoryId
+		entry["snapshotId"] = snapshotId
+		if row, exists := associations[snapshotId]; exists {
+			entry["planId"] = row.PlanId
+			entry["sourceId"] = row.SourceId
+			entry["associationMissing"] = false
+		} else {
+			entry["associationMissing"] = true
+		}
+	}
+	return items
+}
+
 // CachedRepositoryData 读取仓库详情缓存，尚未刷新时返回空数据。
 func (s *PluginInstanceService) CachedRepositoryData(id int64) (map[string]any, error) {
 	var row models.RepoDataInfo
@@ -229,27 +275,73 @@ func (s *PluginInstanceService) CachedRepositoryData(id int64) (map[string]any, 
 }
 
 func (s *PluginInstanceService) repositoryClient(id int64) (*backup.ResticClient, error) {
+	clientConfig, err := s.ResticRepositoryConfig(id)
+	if err != nil {
+		return nil, err
+	}
+	clientConfig.Environment = backup.LocalResticEnvironment
+	clientConfig.Version = s.svcCtx.Restic.Version
+	return backup.NewResticClient(s.svcCtx, clientConfig), nil
+}
+
+// ResticRepositoryConfig 将仓库插件配置转换为 Restic 可执行配置。
+func (s *PluginInstanceService) ResticRepositoryConfig(id int64) (backup.ClientConfig, error) {
 	config, err := s.Config(id)
 	if err != nil {
-		return nil, err
+		return backup.ClientConfig{}, err
 	}
-	access, err := s.resolveAccess(config["accessId"])
+	instance, err := s.Instance(id)
 	if err != nil {
-		return nil, err
+		return backup.ClientConfig{}, err
 	}
-	accessConfig, ok := access["config"].(map[string]any)
-	if !ok {
-		return nil, error_.NewTextError("仓库 SSH 授权配置无效")
+	switch repository := instance.(type) {
+	case *sftprepository.SftpRepository:
+		access, err := s.resolveAccess(config["accessId"])
+		if err != nil {
+			return backup.ClientConfig{}, err
+		}
+		accessConfig, ok := access["config"].(map[string]any)
+		if !ok {
+			return backup.ClientConfig{}, error_.NewTextError("仓库 SSH 授权配置无效")
+		}
+		accessPlugin, err := s.svcCtx.Plugins.NewInstance(fmt.Sprint(access["pluginName"]), accessConfig)
+		if err != nil {
+			return backup.ClientConfig{}, err
+		}
+		sshConfig, ok := accessPlugin.(*sshaccess.SshAccess)
+		if !ok {
+			return backup.ClientConfig{}, error_.NewTextError("仓库 SSH 授权类型无效")
+		}
+		return backup.ClientConfig{RepositoryAccess: sshConfig, RepositoryPath: repository.Path, RepositoryPassword: repository.Password}, nil
+	case *aliossrepository.AliOSSRepository:
+		access, err := s.resolveAccess(config["accessId"])
+		if err != nil {
+			return backup.ClientConfig{}, err
+		}
+		accessConfig, ok := access["config"].(map[string]any)
+		if !ok {
+			return backup.ClientConfig{}, error_.NewTextError("阿里云授权配置无效")
+		}
+		accessPlugin, err := s.svcCtx.Plugins.NewInstance(fmt.Sprint(access["pluginName"]), accessConfig)
+		if err != nil {
+			return backup.ClientConfig{}, err
+		}
+		aliyunConfig, ok := accessPlugin.(*aliyunaccess.AliyunAccess)
+		if !ok {
+			return backup.ClientConfig{}, error_.NewTextError("阿里云授权类型无效")
+		}
+		accessKeyId, accessKeySecret, err := aliyunConfig.Credentials()
+		if err != nil {
+			return backup.ClientConfig{}, err
+		}
+		repositoryURL, password, environment, err := repository.RepositoryConfig(accessKeyId, accessKeySecret)
+		if err != nil {
+			return backup.ClientConfig{}, err
+		}
+		return backup.ClientConfig{RepositoryURL: repositoryURL, RepositoryPassword: password, RepositoryEnvironment: environment}, nil
+	default:
+		return backup.ClientConfig{}, error_.NewTextError("存储仓库插件不支持 Restic 配置")
 	}
-	accessPlugin, err := s.svcCtx.Plugins.NewInstance(fmt.Sprint(access["pluginName"]), accessConfig)
-	if err != nil {
-		return nil, err
-	}
-	sshConfig, ok := accessPlugin.(*sshaccess.SshAccess)
-	if !ok {
-		return nil, error_.NewTextError("仓库 SSH 授权类型无效")
-	}
-	return backup.NewResticClient(s.svcCtx, backup.ClientConfig{Environment: backup.LocalResticEnvironment, RepositoryAccess: sshConfig, RepositoryPath: fmt.Sprint(config["path"]), RepositoryPassword: fmt.Sprint(config["password"]), Version: s.svcCtx.Restic.Version}), nil
 }
 
 func (s *PluginInstanceService) CheckRepository(id int64) error {
@@ -262,29 +354,32 @@ func (s *PluginInstanceService) CheckRepository(id int64) error {
 
 // SnapshotBrowser 查询指定 Restic 快照中的文件条目。
 func (s *PluginInstanceService) SnapshotBrowser(id int64, snapshotId string) (any, error) {
-	config, err := s.Config(id)
+	clientConfig, err := s.ResticRepositoryConfig(id)
 	if err != nil {
 		return nil, err
 	}
-	access, err := s.resolveAccess(config["accessId"])
-	if err != nil {
-		return nil, err
-	}
-	accessConfig, ok := access["config"].(map[string]any)
-	if !ok {
-		return nil, error_.NewTextError("仓库 SSH 授权配置无效")
-	}
-	accessPlugin, err := s.svcCtx.Plugins.NewInstance(fmt.Sprint(access["pluginName"]), accessConfig)
-	if err != nil {
-		return nil, err
-	}
-	sshConfig, ok := accessPlugin.(*sshaccess.SshAccess)
-	if !ok {
-		return nil, error_.NewTextError("仓库 SSH 授权类型无效")
-	}
-	clientConfig := backup.ClientConfig{Environment: backup.LocalResticEnvironment, RepositoryAccess: sshConfig, RepositoryPath: fmt.Sprint(config["path"]), RepositoryPassword: fmt.Sprint(config["password"]), Version: s.svcCtx.Restic.Version}
+	clientConfig.Environment = backup.LocalResticEnvironment
+	clientConfig.Version = s.svcCtx.Restic.Version
 	client := backup.NewResticClient(s.svcCtx, clientConfig)
 	return client.SnapshotBrowser(s.ctx, snapshotId)
+}
+
+// ForgetSnapshot 删除仓库中的指定 Restic 快照并刷新仓库缓存。
+func (s *PluginInstanceService) ForgetSnapshot(id int64, snapshotId string) error {
+	if strings.TrimSpace(snapshotId) == "" {
+		return error_.NewTextError("删除仓库快照失败: 快照 Id 不能为空")
+	}
+	client, err := s.repositoryClient(id)
+	if err != nil {
+		return err
+	}
+	if err := client.ForgetSnapshot(s.ctx, snapshotId); err != nil {
+		return error_.NewWrapError("删除仓库快照失败", err)
+	}
+	if _, err := s.RefreshRepositoryData(id, nil); err != nil {
+		return error_.NewWrapError("删除仓库快照后刷新仓库数据失败", err)
+	}
+	return nil
 }
 
 // Config returns the decrypted runtime configuration for an instance.

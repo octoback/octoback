@@ -23,6 +23,13 @@ describe("plugin path selector helpers", () => {
     expect(nodes[0].isLeaf).toBe(false);
   });
 
+  it("marks a lazily loaded empty directory as a leaf so it will not remain expandable", () => {
+    const nodes = normalizePathNodes({ paths: [{ key: "/empty", isLeaf: false }] });
+    expect(updatePathNodeChildren(nodes, "/empty", [])).toBe(true);
+    expect(nodes[0].children).toEqual([]);
+    expect(nodes[0].isLeaf).toBe(true);
+  });
+
   it("normalizes action directory results into tree nodes", () => {
     expect(
       normalizePathNodes({
@@ -37,9 +44,10 @@ describe("plugin path selector helpers", () => {
     ]);
   });
 
-  it("updates the expanded directory counts", () => {
+  it("keeps path and merged item count as separate node fields", () => {
     const nodes = normalizePathNodes({ paths: [{ key: "/home", isLeaf: false }] });
     expect(updatePathNodeCounts(nodes, "/home", { fileCount: 4, directoryCount: 2 })).toBe(true);
-    expect(nodes[0].title).toBe("/home（文件 4，子目录 2）");
+    expect(nodes[0]).toEqual({ title: "/home", key: "/home", isLeaf: false, fileCount: 4, directoryCount: 2 });
+    expect(nodes[0].fileCount! + nodes[0].directoryCount!).toBe(6);
   });
 });

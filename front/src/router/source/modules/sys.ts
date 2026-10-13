@@ -67,6 +67,13 @@ export const sysResources = [
         component: "/sys/plan/runs/index.vue"
       },
       {
+        title: "恢复任务",
+        name: "restore-task",
+        meta: { icon: "ion:arrow-undo-outline", permission: "read" },
+        path: "/sys/restore-task",
+        component: "/sys/restore-task/index.vue"
+      },
+      {
         title: "审计日志",
         name: "audit",
         meta: { icon: "ion:list-outline", permission: "read" },

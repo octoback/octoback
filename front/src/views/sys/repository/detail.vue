@@ -7,10 +7,10 @@
       <template #extra>
         <a-space>
           <a-tooltip title="校验仓库数据完整性，不会修改仓库内容">
-            <a-button :loading="actionLoading" @click="checkRepository">检查</a-button>
+            <a-button type="primary" :loading="actionLoading" @click="checkRepository">检查</a-button>
           </a-tooltip>
           <a-tooltip title="重新查询仓库快照和统计数据，并更新本地缓存">
-            <a-button :loading="loading" @click="loadSnapshots(true)">刷新</a-button>
+            <a-button type="primary" :loading="loading" @click="loadSnapshots(true)">刷新</a-button>
           </a-tooltip>
         </a-space>
       </template>
@@ -36,13 +36,14 @@
                 <TagOutlined /> {{ group.tag }} <span>{{ group.items.length }}</span>
               </div>
               <button v-for="snapshot in group.items" :key="snapshot.id" class="snapshot-item" :class="{ active: selectedSnapshot?.id === snapshot.id }" type="button" @click="selectSnapshot(snapshot)">
-                <span class="snapshot-status"><DatabaseOutlined /></span
+                <span class="snapshot-status"> <DatabaseOutlined /> </span
                 ><span class="snapshot-item-body"
                   ><span class="snapshot-time-row"
                     ><strong>{{ formatDate(snapshot.time) }}</strong
                     ><a-tag v-for="tag in snapshot.tags?.length ? snapshot.tags : ['无标签']" :key="tag" color="blue">{{ tag }}</a-tag></span
                   ><span class="snapshot-id">{{ snapshot.id }}</span></span
-                ><RightOutlined />
+                >
+                <RightOutlined />
               </button>
             </div>
           </div>
@@ -78,19 +79,27 @@
               </div>
             </div>
             <div class="paths-section">
-              <div class="section-title">备份路径</div>
+              <div class="mb-2">
+                <a-button type="primary" :disabled="!restorePaths.length" @click="openRestoreDialog">恢复所选</a-button>
+              </div>
               <div v-if="selectedSnapshot.paths?.length" class="backup-path-list">
-                <div v-for="path in selectedSnapshot.paths" :key="path" class="backup-path-item">
-                  <FolderOutlined />
-                  <code>{{ path }}</code>
+                <div class="paths-heading">
+                  <div class="section-title">恢复备份目录</div>
                 </div>
+                <a-checkbox-group v-model:value="selectedBackupPaths">
+                  <label v-for="path in selectedSnapshot.paths" :key="path" class="backup-path-item">
+                    <a-checkbox :value="path" />
+                    <FolderOutlined />
+                    <code>{{ path }}</code>
+                  </label>
+                </a-checkbox-group>
               </div>
               <a-empty v-else :image="null" description="没有备份路径" />
             </div>
             <div class="browser-section">
-              <div class="section-title">Snapshot Browser</div>
+              <div class="section-title">恢复指定路径</div>
               <a-spin :spinning="browserLoading">
-                <a-directory-tree :key="selectedSnapshot.id" :tree-data="browserTree" :load-data="loadBrowserNode" :show-icon="true" block-node />
+                <a-directory-tree :key="selectedSnapshot.id" v-model:checked-keys="selectedPaths" :tree-data="browserTree" :load-data="loadBrowserNode" :show-icon="true" checkable block-node />
               </a-spin>
             </div>
           </template>
@@ -100,10 +109,11 @@
     </a-spin>
   </fs-page>
 </template>
-<script setup lang="ts">
+<script setup lang="tsx">
 import { computed, h, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { DatabaseOutlined, FileOutlined, FolderOutlined, RightOutlined, TagOutlined } from "@ant-design/icons-vue";
+import { Alert, Form, FormItem, message } from "ant-design-vue";
 import {
   checkPluginInstanceRepository,
   getPluginInstanceInfo,
@@ -112,7 +122,11 @@ import {
   getPluginInstanceStats,
   refreshPluginInstanceRepositoryData
 } from "/@/views/sys/plugin/plugin-api";
-import { message } from "ant-design-vue";
+import { createRestoreTask } from "/@/views/sys/restore-task/api";
+import AccessSelector from "/@/components/access-selector/index.vue";
+import RestorePathSelector from "/@/components/restore-path-selector/index.vue";
+import { compactRestorePaths } from "/@/components/restore-path-selector/preview";
+import { useFormDialog } from "/@/use/use-dialog";
 interface Snapshot {
   id: string;
   time?: string;
@@ -121,6 +135,9 @@ interface Snapshot {
   tags?: string[];
   paths?: string[];
   summary?: { total_files?: number; total_bytes_processed?: number };
+  sourceId?: number;
+  repositoryId?: number;
+  snapshotId?: string;
 }
 interface BrowserEntry {
   path?: string;
@@ -141,6 +158,11 @@ const browserLoading = ref(false);
 const browserEntries = ref<BrowserEntry[]>([]);
 const browserLoaded = ref(false);
 const actionLoading = ref(false);
+const selectedPaths = ref<string[]>([]);
+const selectedBackupPaths = ref<string[]>([]);
+const restorePaths = computed(() => compactRestorePaths([...selectedBackupPaths.value, ...selectedPaths.value]));
+const restoreForm = ref({ targetAccessId: 0, targetPath: [] as string[] });
+const { openFormDialog } = useFormDialog();
 const snapshotGroups = computed(() => {
   const groups = new Map<string, Snapshot[]>();
   for (const snapshot of snapshots.value) {
@@ -205,7 +227,61 @@ async function selectSnapshot(snapshot: Snapshot) {
   browserLoading.value = true;
   browserEntries.value = [];
   browserLoaded.value = false;
+  selectedPaths.value = [];
+  selectedBackupPaths.value = [];
   browserLoading.value = false;
+}
+async function submitRestore() {
+  if (!selectedSnapshot.value || !restoreForm.value.targetAccessId || restoreForm.value.targetPath.length !== 1) {
+    message.error("请选择恢复路径、目标主机和目标目录");
+    throw new Error("恢复参数不完整");
+  }
+  await createRestoreTask({
+    repositoryId: Number(route.params.id),
+    snapshotId: selectedSnapshot.value.id,
+    sourceId: selectedSnapshot.value.sourceId,
+    targetAccessId: restoreForm.value.targetAccessId,
+    targetPath: restoreForm.value.targetPath[0],
+    selectedPaths: restorePaths.value
+  });
+  message.success("恢复任务已创建");
+}
+function openRestoreDialog() {
+  restoreForm.value = { targetAccessId: 0, targetPath: [] };
+  openFormDialog({
+    title: "创建恢复任务",
+    noneForm: true,
+    className: "restore-task-dialog",
+    wrapper: { width: "800px" },
+    body: () => (
+      <>
+        <Alert type="warning" showIcon message="如果目标目录已有同名文件，恢复时会用备份中的文件覆盖它" class="mb-2" />
+        <Form class="restore-form">
+          <FormItem label="目标 SSH 授权" required>
+            <AccessSelector
+              modelValue={restoreForm.value.targetAccessId}
+              onUpdate:modelValue={(value: number | null) => {
+                restoreForm.value.targetAccessId = value || 0;
+              }}
+            />
+          </FormItem>
+          <FormItem label="恢复到主机目录" required>
+            <RestorePathSelector
+              modelValue={restoreForm.value.targetPath}
+              sourcePaths={restorePaths.value}
+              instanceId={selectedSnapshot.value?.sourceId}
+              accessId={restoreForm.value.targetAccessId}
+              action="onListPaths"
+              onUpdate:modelValue={(value: string[]) => {
+                restoreForm.value.targetPath = value;
+              }}
+            />
+          </FormItem>
+        </Form>
+      </>
+    ),
+    onSubmit: submitRestore
+  });
 }
 async function loadBrowserNode() {
   if (browserLoaded.value || !selectedSnapshot.value) {
@@ -260,29 +336,56 @@ async function checkRepository() {
 </script>
 <style lang="less">
 .repository-detail-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   background: #f5f7fa;
 
   .repository-detail-header {
     background: #fff;
     border-bottom: 1px solid #e5e7eb;
   }
-  .repository-detail-loading {
-    display: block;
-    min-height: 520px;
+
+  .ant-spin-nested-loading {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+
+    .ant-spin-container {
+      height: 100%;
+    }
   }
+
+  .fs-page-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+  }
+
   .repository-detail-content {
     display: grid;
     grid-template-columns: minmax(280px, 34%) 1fr;
-    min-height: 560px;
+    height: 100%;
+    min-height: 0;
     background: #fff;
   }
+
   .snapshot-list-panel {
+    min-height: 0;
+    overflow-y: auto;
     border-right: 1px solid #e5e7eb;
     padding: 24px 0;
   }
+
   .snapshot-detail-panel {
+    min-height: 0;
+    overflow-y: auto;
     padding: 32px 40px;
   }
+
   .panel-heading,
   .detail-heading {
     display: flex;
@@ -290,31 +393,39 @@ async function checkRepository() {
     justify-content: space-between;
     padding: 0 24px;
   }
+
   .detail-heading {
     padding: 0;
   }
+
   .panel-kicker {
     color: #8b95a5;
     font-size: 11px;
     letter-spacing: 0.12em;
   }
+
   h1,
   h2 {
     margin: 4px 0 0;
     color: #17212f;
   }
+
   h1 {
     font-size: 26px;
   }
+
   h2 {
     font-size: 18px;
   }
+
   .snapshot-list {
     margin-top: 18px;
   }
+
   .snapshot-group + .snapshot-group {
     margin-top: 20px;
   }
+
   .snapshot-group-title {
     display: flex;
     align-items: center;
@@ -324,10 +435,12 @@ async function checkRepository() {
     font-size: 12px;
     font-weight: 600;
   }
+
   .snapshot-group-title span {
     color: #a0aaba;
     font-weight: 400;
   }
+
   .snapshot-item {
     display: flex;
     align-items: center;
@@ -341,93 +454,127 @@ async function checkRepository() {
     text-align: left;
     cursor: pointer;
   }
+
   .snapshot-item:hover,
   .snapshot-item.active {
     background: #eef6ff;
     border-left-color: #1677ff;
   }
+
   .snapshot-status {
     color: #1677ff;
     font-size: 17px;
   }
+
   .snapshot-item-body {
     display: grid;
     flex: 1;
     gap: 3px;
     min-width: 0;
   }
+
   .snapshot-item-body strong {
     color: #17212f;
   }
+
   .snapshot-time-row {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
   }
+
   .snapshot-time-row :deep(.ant-tag) {
     margin: 0;
   }
+
   .snapshot-item-body span {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
   .snapshot-id {
     color: #9aa4b2;
     font-family: monospace;
     font-size: 12px;
   }
+
   .snapshot-tag {
     color: #64748b;
     font-size: 12px;
   }
+
   .detail-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 24px;
   }
+
   .detail-grid div {
     display: grid;
     gap: 6px;
   }
+
   .detail-grid span {
     color: #8b95a5;
     font-size: 13px;
   }
+
   .detail-grid strong {
     color: #263343;
     font-size: 15px;
     word-break: break-word;
   }
+
   .paths-section,
   .browser-section {
     margin-top: 36px;
   }
+
+  .paths-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
   .backup-path-list {
-    display: grid;
-    gap: 8px;
     padding: 8px 12px;
     border: 1px solid #e5e7eb;
     border-radius: 6px;
   }
+
+  .backup-path-list :deep(.ant-checkbox-group) {
+    display: grid;
+    width: 100%;
+    gap: 8px;
+  }
+
   .backup-path-item {
     display: flex;
     align-items: center;
     gap: 8px;
+    width: 100%;
     min-width: 0;
     color: #64748b;
   }
+
   .backup-path-item code {
     min-width: 0;
     color: #263343;
     font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
     overflow-wrap: anywhere;
   }
+
   .browser-section {
     padding: 16px;
     border: 1px solid #e5e7eb;
     border-radius: 6px;
+
+    .section-title {
+      margin-bottom: 12px;
+    }
 
     .ant-tree .ant-tree-switcher {
       display: flex;
@@ -435,32 +582,48 @@ async function checkRepository() {
       justify-content: center;
     }
   }
+
   .browser-section :deep(.ant-tree-node-content-wrapper),
   .browser-section :deep(.ant-tree-iconEle) {
     display: inline-flex;
     align-items: center;
   }
+
   .browser-section :deep(.ant-tree-iconEle) {
     justify-content: center;
     height: 24px;
   }
+
   .section-title {
     margin-bottom: 10px;
     color: #263343;
     font-weight: 600;
   }
 
+  .paths-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
   @media (max-width: 800px) {
     .repository-detail-content {
       grid-template-columns: 1fr;
+      grid-template-rows: minmax(240px, 40%) minmax(0, 1fr);
     }
+
     .snapshot-list-panel {
+      min-height: 0;
       border-right: 0;
       border-bottom: 1px solid #e5e7eb;
     }
+
     .snapshot-detail-panel {
+      min-height: 0;
       padding: 24px;
     }
+
     .detail-grid {
       grid-template-columns: repeat(2, 1fr);
     }

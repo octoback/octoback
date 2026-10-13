@@ -36,6 +36,11 @@ export const updateBackupPlan = (id: number, data: Partial<BackupPlan>) => reque
 export const deleteBackupPlan = (id: number) => request({ url: `/plan/delete?id=${id}`, method: "post", data: {} });
 export const runBackupPlan = (id: number) => request({ url: `/plan/run?id=${id}`, method: "post", data: {} });
 export const getBackupRunInfo = (id: number) => request({ url: `/plan/run/info?id=${id}`, method: "post", data: {} });
+export interface BackupRunLogDetail {
+  id: number;
+  content?: string;
+  summary?: Record<string, unknown> | null;
+}
 export const getBackupRunLog = (id: number) => request({ url: `/plan/run/log?id=${id}`, method: "post", data: {} });
 export const getBackupRunPage = (data: Record<string, unknown> = {}) => request({ url: "/plan/run/page", method: "post", data });
 export interface BackupLog {
@@ -46,6 +51,7 @@ export interface BackupLog {
   status: string;
   progress: number;
   stage?: string;
+  result?: string;
   error?: string;
   startedAt?: number;
   finishedAt?: number;

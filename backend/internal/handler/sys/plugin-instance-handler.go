@@ -26,6 +26,7 @@ func RegisterPlugin(app *fiber.App, s *svc.ServiceContext) {
 		web_.Route{Path: "/refresh-repository-data", Permission: web_.Write, Handler: web_.Handle(pluginInstanceRefreshRepositoryData(s))},
 		web_.Route{Path: "/check", Permission: web_.Write, Handler: web_.Handle(pluginInstanceCheck(s))},
 		web_.Route{Path: "/snapshot-browser", Permission: web_.Read, Handler: web_.Handle(pluginInstanceSnapshotBrowser(s))},
+		web_.Route{Path: "/forget-snapshot", Permission: web_.Write, Handler: web_.Handle(pluginInstanceForgetSnapshot(s))},
 		web_.Route{Path: "/simpleByIds", Permission: web_.Read, Handler: web_.HandleJSON(pluginInstanceSimpleByIDs(s))},
 		web_.Route{Path: "/create", Permission: web_.Write, Handler: web_.HandleJSON(pluginInstanceCreate(s))},
 		web_.Route{Path: "/update", Permission: web_.Write, Handler: web_.HandleJSON(pluginInstanceUpdate(s))},
@@ -83,6 +84,20 @@ func pluginInstanceSnapshotBrowser(s *svc.ServiceContext) func(fiber.Ctx) (any, 
 			return nil, error_.NewCodeTextError(code_.ParamError, "快照 Id 不能为空")
 		}
 		return logic.NewPluginInstanceService(c.Context(), s).SnapshotBrowser(id, snapshotId)
+	}
+}
+
+func pluginInstanceForgetSnapshot(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
+	return func(c fiber.Ctx) (any, error) {
+		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
+		if err != nil {
+			return nil, error_.NewCodeTextError(code_.ParamError, "插件 Id 无效")
+		}
+		snapshotId := c.Query("snapshotId")
+		if err := logic.NewPluginInstanceService(c.Context(), s).ForgetSnapshot(id, snapshotId); err != nil {
+			return nil, err
+		}
+		return fiber.Map{}, nil
 	}
 }
 

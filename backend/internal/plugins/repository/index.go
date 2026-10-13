@@ -3,6 +3,7 @@ package repository
 import (
 	"handfree-work/octo-backup/internal/base/error_"
 	"handfree-work/octo-backup/internal/modules/plugin"
+	"handfree-work/octo-backup/internal/plugins/repository/alioss"
 	"handfree-work/octo-backup/internal/plugins/repository/sftp"
 )
 
@@ -11,7 +12,7 @@ type provider interface {
 }
 
 func Register(r *plugin.Registry) error {
-	providers := []provider{sftp.Provider{}}
+	providers := []provider{sftp.Provider{}, alioss.Provider{}}
 	for _, p := range providers {
 		d, err := p.Definition()
 		if err != nil {

@@ -7,24 +7,27 @@ import (
 
 // ClientConfig 保存 ResticClient 的执行环境和仓库配置。
 type ClientConfig struct {
-	Environment        ResticEnvironment
-	ExecutionAccess    *sshaccess.SshAccess
-	RepositoryAccess   *sshaccess.SshAccess
-	RepositoryPath     string
-	RepositoryPassword string
-	Version            string
-	RemoteDirectory    string
-	ResticBinary       []byte
-	ResticBinaryPath   string
-	Compression        string
-	KeepPolicy         map[string]any
-	KeepLast           int
-	KeepHourly         int
-	KeepDaily          int
-	KeepWeekly         int
-	KeepMonthly        int
-	KeepYearly         int
-	Progress           func(progress int, stage string)
+	Environment           ResticEnvironment
+	ExecutionAccess       *sshaccess.SshAccess
+	RepositoryAccess      *sshaccess.SshAccess
+	RepositoryPath        string
+	RepositoryURL         string
+	RepositoryPassword    string
+	RepositoryEnvironment []string
+	Version               string
+	RemoteDirectory       string
+	ResticBinary          []byte
+	ResticBinaryPath      string
+	Compression           string
+	KeepPolicy            map[string]any
+	KeepLast              int
+	KeepHourly            int
+	KeepDaily             int
+	KeepWeekly            int
+	KeepMonthly           int
+	KeepYearly            int
+	Progress              func(progress int, stage string)
+	Log                   func(level string, message string)
 }
 
 // BackupRequest 保存一次备份所需的来源数据参数。
@@ -36,15 +39,17 @@ type BackupRequest struct {
 
 // RestoreRequest 保存还原一个快照所需的参数。
 type RestoreRequest struct {
-	SnapshotId string
-	TargetPath string
+	SnapshotId   string
+	TargetPath   string
+	IncludePaths []string
 }
 
 // BackupResult 表示一次备份执行的最终状态。
 type BackupResult struct {
-	Status  string         `json:"status"`
-	Output  string         `json:"output,omitempty"`
-	Summary map[string]any `json:"summary,omitempty"`
+	Status     string         `json:"status"`
+	Output     string         `json:"output,omitempty"`
+	Summary    map[string]any `json:"summary,omitempty"`
+	SnapshotId string         `json:"snapshotId,omitempty"`
 }
 
 // ResticEnvironment 指定 Restic 命令的执行位置。
@@ -66,7 +71,7 @@ func NewResticClient(svcCtx *svc.ServiceContext, config ClientConfig) *ResticCli
 	if config.Environment == LocalResticEnvironment {
 		client.executor = &LocalResticExecutor{}
 	} else {
-		client.executor = &RemoteResticExecutor{Access: config.ExecutionAccess, Progress: config.Progress}
+		client.executor = &RemoteResticExecutor{Access: config.ExecutionAccess, Progress: config.Progress, Log: config.Log}
 	}
 	return client
 }

@@ -2,7 +2,7 @@ package models
 
 import "handfree-work/octo-backup/internal/base/db_"
 
-// BackupLogContent 保存一次备份执行产生的完整 Restic 输出日志。
+// BackupLogContent 保存一次备份执行产生的完整可读日志。
 type BackupLogContent struct {
 	db_.BaseModel
 	BackupLogId int64  `json:"backupLogId" gorm:"not null;uniqueIndex"`

@@ -2,7 +2,46 @@ import { CreateCrudOptionsRet, dict } from "@fast-crud/fast-crud";
 import { Modal } from "ant-design-vue";
 import { h } from "vue";
 import { getBackupPlanList } from "../api";
-import { getBackupRunLog, getBackupRunPage, type BackupLog } from "../api";
+import { getBackupRunLog, getBackupRunPage, type BackupLog, type BackupRunLogDetail } from "../api";
+
+const logLevelPattern = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \[(INFO|WARN|ERROR)\] (.*)$/;
+
+function formatSummaryValue(key: string, value: unknown) {
+  const labels: Record<string, string> = {
+    snapshot_id: "快照 ID",
+    total_files_processed: "处理文件",
+    total_bytes_processed: "处理字节",
+    total_duration: "耗时（秒）",
+    files_new: "新增文件",
+    files_changed: "变更文件",
+    files_unmodified: "未变更文件",
+    dirs_new: "新增目录",
+    dirs_changed: "变更目录",
+    dirs_unmodified: "未变更目录"
+  };
+  const label = labels[key] || key;
+  let renderedValue = String(value);
+  if (typeof value === "object") {
+    renderedValue = JSON.stringify(value);
+  }
+  return `${label}: ${renderedValue}`;
+}
+
+function renderLogContent(content: string) {
+  return content.split("\n").map((line, index) => {
+    const match = logLevelPattern.exec(line);
+    if (!match) {
+      return h("div", { key: index, class: "backup-log-line backup-log-line-plain" }, line || " ");
+    }
+    const [, timestamp, level, message] = match;
+    return h("div", { key: index, class: `backup-log-line backup-log-level-${level.toLowerCase()}` }, [
+      h("span", { class: "backup-log-time" }, timestamp),
+      h("span", { class: "backup-log-level" }, level),
+      h("span", { class: "backup-log-message" }, message)
+    ]);
+  });
+}
+
 export default function (): CreateCrudOptionsRet<BackupLog> {
   const openRepository = (row: BackupLog) => {
     if (row.repositoryId) {
@@ -10,30 +49,28 @@ export default function (): CreateCrudOptionsRet<BackupLog> {
     }
   };
   const openResticLog = async (row: BackupLog) => {
-    const response = (await getBackupRunLog(row.id)) as { content?: string };
-    const content = response.content || "暂无 Restic 日志";
+    const response = (await getBackupRunLog(row.id)) as BackupRunLogDetail;
+    const content = response.content || "暂无备份执行日志";
+    const summary = response.summary || {};
+    const summaryEntries = Object.entries(summary);
     Modal.info({
-      title: `Restic 日志 - ${row.planName || `运行记录 ${row.id}`}`,
-      width: 860,
-      content: h(
-        "pre",
-        {
-          style: {
-            maxHeight: "560px",
-            margin: 0,
-            padding: "12px",
-            overflow: "auto",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            background: "#f6f8fa",
-            borderRadius: "6px",
-            fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
-            fontSize: "12px",
-            lineHeight: "1.55"
-          }
-        },
-        content
-      )
+      title: `备份日志 - ${row.planName || `运行记录 ${row.id}`}`,
+      width: 980,
+      wrapClassName: "backup-log-modal",
+      content: () => {
+        let summaryContent = h("span", { class: "backup-log-summary-empty" }, "暂无 summary");
+        if (summaryEntries.length > 0) {
+          summaryContent = h(
+            "div",
+            { class: "backup-log-summary-grid" },
+            summaryEntries.map(([key, value]) => h("span", { key }, formatSummaryValue(key, value)))
+          );
+        }
+        return h("div", { class: "backup-log-modal-content" }, [
+          h("div", { class: "backup-log-summary" }, [h("div", { class: "backup-log-summary-title" }, "Restic Summary"), summaryContent]),
+          h("div", { class: "backup-log-terminal" }, renderLogContent(content))
+        ]);
+      }
     });
   };
   return {

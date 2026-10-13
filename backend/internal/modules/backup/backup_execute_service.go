@@ -3,8 +3,10 @@ package logic
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"strings"
 	"time"
 
 	"handfree-work/octo-backup/internal/base/db_"
@@ -15,7 +17,6 @@ import (
 	"handfree-work/octo-backup/internal/modules/plugin"
 	pluginservice "handfree-work/octo-backup/internal/modules/plugin/service"
 	sshaccess "handfree-work/octo-backup/internal/plugins/access/ssh"
-	sftprepository "handfree-work/octo-backup/internal/plugins/repository/sftp"
 	sshsource "handfree-work/octo-backup/internal/plugins/source/ssh"
 	"handfree-work/octo-backup/internal/svc"
 )
@@ -34,8 +35,56 @@ func NewBackupExecuteService(ctx context.Context, s *svc.ServiceContext) *Backup
 	return &BackupExecuteService{ctx: ctx, svcCtx: s}
 }
 
+// backupLogEntry 将日志级别和消息编码为可读的单行日志。
+func backupLogEntry(level string, message string) string {
+	level = strings.ToUpper(strings.TrimSpace(level))
+	if level != "WARN" && level != "ERROR" {
+		level = "INFO"
+	}
+	message = strings.TrimSpace(message)
+	return fmt.Sprintf("%s [%s] %s\n", time.Now().Format("2006-01-02 15:04:05.000"), level, message)
+}
+
+func serializeBackupSummary(summary map[string]any) (string, error) {
+	if summary == nil {
+		return "", nil
+	}
+	data, err := json.Marshal(summary)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func appendBackupLog(db *gorm.DB, logId int64, level string, message string) {
+	if db == nil || logId <= 0 || strings.TrimSpace(message) == "" {
+		return
+	}
+	entry := backupLogEntry(level, message)
+	var content models.BackupLogContent
+	result := db.Where("backup_log_id = ?", logId).First(&content)
+	if result.Error == gorm.ErrRecordNotFound {
+		content = models.BackupLogContent{BackupLogId: logId, Content: entry}
+		if err := db.Create(&content).Error; err != nil {
+			log_.Logger.Warn("创建备份日志内容失败", zap.Int64("logId", logId), zap.Error(err))
+		}
+		return
+	}
+	if result.Error != nil {
+		log_.Logger.Warn("读取备份日志内容失败", zap.Int64("logId", logId), zap.Error(result.Error))
+		return
+	}
+	content.Content += entry
+	if err := db.Model(&models.BackupLogContent{}).Where("backup_log_id = ?", logId).Update("content", content.Content).Error; err != nil {
+		log_.Logger.Warn("追加备份日志内容失败", zap.Int64("logId", logId), zap.Error(err))
+	}
+}
+
 func (s *BackupExecuteService) Execute(id int64, logId int64) (*BackupExecuteResult, error) {
 	currentProgress := 0
+	appendLog := func(level string, message string) {
+		appendBackupLog(s.svcCtx.Db, logId, level, message)
+	}
 	updateLog := func(status string, nextProgress int, stage, result, message string) {
 		if status == "failed" && nextProgress == 100 {
 			nextProgress = currentProgress
@@ -47,16 +96,25 @@ func (s *BackupExecuteService) Execute(id int64, logId int64) (*BackupExecuteRes
 			fields["finished_at"] = now
 		}
 		_ = s.svcCtx.Db.Model(&models.BackupLog{}).Where("id = ?", logId).Updates(fields).Error
+		level := "INFO"
+		logMessage := stage
+		if message != "" {
+			level = "ERROR"
+			logMessage = stage + "：" + message
+		}
+		appendLog(level, logMessage)
 	}
-	saveOutput := func(output string) {
-		content := &models.BackupLogContent{BackupLogId: logId, Content: output}
-		result := s.svcCtx.Db.Where("backup_log_id = ?", logId).First(&models.BackupLogContent{})
-		if result.Error == nil {
-			_ = s.svcCtx.Db.Model(&models.BackupLogContent{}).Where("backup_log_id = ?", logId).Update("content", output).Error
+	saveSummary := func(summary map[string]any) {
+		data, err := serializeBackupSummary(summary)
+		if err != nil {
+			appendLog("WARN", "序列化 Restic summary 失败："+err.Error())
 			return
 		}
-		if result.Error == gorm.ErrRecordNotFound {
-			_ = s.svcCtx.Db.Create(content).Error
+		if data == "" {
+			return
+		}
+		if err := s.svcCtx.Db.Model(&models.BackupLog{}).Where("id = ?", logId).Update("summary", data).Error; err != nil {
+			appendLog("WARN", "保存 Restic summary 失败："+err.Error())
 		}
 	}
 	updateLog("running", 5, "读取备份计划", "", "")
@@ -71,6 +129,7 @@ func (s *BackupExecuteService) Execute(id int64, logId int64) (*BackupExecuteRes
 		updateLog("failed", 100, "读取备份计划", "", "备份计划不存在")
 		return nil, error_.NewTextError("备份计划不存在")
 	}
+	appendLog("INFO", fmt.Sprintf("备份计划读取完成：%s", plan.Name))
 	if !plan.Enabled {
 		updateLog("failed", 100, "校验备份计划", "", "已禁用的备份计划不能执行")
 		return nil, error_.NewTextError("已禁用的备份计划不能执行")
@@ -80,45 +139,57 @@ func (s *BackupExecuteService) Execute(id int64, logId int64) (*BackupExecuteRes
 		now := time.Now().Unix()
 		plan.LastRunAt = &now
 		_, _ = dao.UpdateById(id, plan)
+		if message == "" {
+			appendLog("INFO", "备份计划状态更新为 "+status)
+			return
+		}
+		appendLog("ERROR", "备份计划状态更新为 "+status+"："+message)
 	}
 	setStatus("running", "")
 	log_.Logger.Info("备份计划状态更新为 running", zap.Int64("planId", id))
 	instance := pluginservice.NewPluginInstanceService(s.ctx, s.svcCtx)
 	source, err := instance.Instance(plan.SourceId)
 	if err != nil {
+		appendLog("ERROR", "加载备份来源插件失败："+err.Error())
 		setStatus("failed", err.Error())
 		return nil, err
 	}
-	result, err := s.doBackup(plan, source, logId)
+	appendLog("INFO", "备份来源插件加载完成")
+	result, err := s.doBackup(plan, source, func(progress int, stage string) {
+		updateLog("running", progress, stage, "", "")
+	}, appendLog)
 	if err != nil {
-		resultText := ""
 		if result != nil {
-			resultText = result.Output
+			saveSummary(result.Summary)
 		}
-		saveOutput(resultText)
-		updateLog("failed", 100, "执行备份", resultText, err.Error())
+		updateLog("failed", 100, "执行备份", "", err.Error())
 		setStatus("failed", err.Error())
 		return nil, err
 	}
+	saveSummary(result.Summary)
+	if result.SnapshotId == "" {
+		message := "备份结果缺少快照 Id"
+		updateLog("failed", 100, "校验备份结果", "", message)
+		setStatus("failed", message)
+		return nil, error_.NewTextError("%s", message)
+	}
+	_ = s.svcCtx.Db.Model(&models.BackupLog{}).Where("id = ?", logId).Updates(map[string]any{"plan_id": plan.Id, "source_id": plan.SourceId, "repository_id": plan.RepositoryId, "snapshot_id": result.SnapshotId}).Error
 	setStatus("success", "")
-	saveOutput(result.Output)
 	updateLog("success", 100, "完成", "", "")
 	return &BackupExecuteResult{Id: id, Status: result.Status}, nil
 }
 
-func (s *BackupExecuteService) doBackup(plan *models.BackupPlan, source plugin.PluginInstance, logId int64) (*restic.BackupResult, error) {
+func (s *BackupExecuteService) doBackup(plan *models.BackupPlan, source plugin.PluginInstance, progress func(int, string), appendLog func(string, string)) (*restic.BackupResult, error) {
+	appendLog("INFO", "开始加载备份来源配置")
 	sourceConfig, ok := source.(*sshsource.SshSource)
 	if !ok {
 		return nil, error_.NewTextError("备份来源插件不支持备份配置")
 	}
 	instance := pluginservice.NewPluginInstanceService(s.ctx, s.svcCtx)
-	repositoryPlugin, err := instance.Instance(plan.RepositoryId)
+	appendLog("INFO", "开始加载存储仓库配置")
+	repositoryConfig, err := instance.ResticRepositoryConfig(plan.RepositoryId)
 	if err != nil {
 		return nil, err
-	}
-	repositoryConfig, ok := repositoryPlugin.(*sftprepository.SftpRepository)
-	if !ok {
-		return nil, error_.NewTextError("存储仓库插件不支持备份配置")
 	}
 	accessIDValue := int64(sourceConfig.AccessId)
 	if accessIDValue <= 0 {
@@ -134,41 +205,21 @@ func (s *BackupExecuteService) doBackup(plan *models.BackupPlan, source plugin.P
 	}
 	paths := restic.StringSlice(sourceConfig.Paths)
 	excludePaths := restic.StringSlice(sourceConfig.ExcludePaths)
+	appendLog("INFO", fmt.Sprintf("备份来源配置加载完成：%d 个路径，%d 个排除路径", len(paths), len(excludePaths)))
 	binary, err := restic.LoadResticBinary()
 	if err != nil {
 		return nil, err
 	}
-	repositoryAccessID := int64(repositoryConfig.AccessId)
-	if repositoryAccessID <= 0 {
-		return nil, error_.NewTextError("存储仓库 SSH 授权配置无效: %d", repositoryAccessID)
-	}
-	repositoryAccessPlugin, err := instance.Instance(repositoryAccessID)
-	if err != nil {
-		return nil, err
-	}
-	repositoryAccess, ok := repositoryAccessPlugin.(*sshaccess.SshAccess)
-	if !ok {
-		return nil, error_.NewTextError("存储仓库 SSH 授权插件类型无效")
-	}
-	clientConfig := restic.ClientConfig{
-		Environment:        restic.RemoteResticEnvironment,
-		ExecutionAccess:    sshConfig,
-		RepositoryAccess:   repositoryAccess,
-		RepositoryPath:     repositoryConfig.Path,
-		RepositoryPassword: repositoryConfig.Password,
-		Version:            s.svcCtx.Restic.Version,
-		RemoteDirectory:    ".octo_backup",
-		ResticBinary:       binary,
-		Compression:        plan.Compression,
-		KeepPolicy:         map[string]any{},
-		Progress: func(progress int, stage string) {
-			_ = s.svcCtx.Db.Model(&models.BackupLog{}).Where("id = ?", logId).Updates(map[string]any{
-				"status":   "running",
-				"progress": progress,
-				"stage":    stage,
-			})
-		},
-	}
+	clientConfig := repositoryConfig
+	clientConfig.Environment = restic.RemoteResticEnvironment
+	clientConfig.ExecutionAccess = sshConfig
+	clientConfig.Version = s.svcCtx.Restic.Version
+	clientConfig.RemoteDirectory = ".octo_backup"
+	clientConfig.ResticBinary = binary
+	clientConfig.Compression = plan.Compression
+	clientConfig.KeepPolicy = map[string]any{}
+	clientConfig.Progress = progress
+	clientConfig.Log = appendLog
 	if plan.KeepPolicy != "" {
 		if err := json.Unmarshal([]byte(plan.KeepPolicy), &clientConfig.KeepPolicy); err != nil {
 			return nil, error_.NewWrapError("解析备份保留策略失败", err)
@@ -180,12 +231,16 @@ func (s *BackupExecuteService) doBackup(plan *models.BackupPlan, source plugin.P
 		ExcludePaths:  excludePaths,
 	}
 	client := restic.NewResticClient(s.svcCtx, clientConfig)
+	appendLog("INFO", "开始执行 Restic 备份")
 	result, err := client.Backup(s.ctx, backupRequest)
 	if err != nil {
-		return nil, error_.NewWrapError("执行备份任务失败", err)
+		return result, error_.NewWrapError("执行备份任务失败", err)
 	}
 	if _, refreshErr := instance.RefreshRepositoryData(plan.RepositoryId, result.Summary); refreshErr != nil {
+		appendLog("WARN", "备份完成后刷新仓库详情缓存失败："+refreshErr.Error())
 		log_.Logger.Warn("备份完成后刷新仓库详情缓存失败", zap.Int64("repositoryId", plan.RepositoryId), zap.Error(refreshErr))
+	} else {
+		appendLog("INFO", "备份完成后仓库详情缓存刷新成功")
 	}
 	return result, nil
 }

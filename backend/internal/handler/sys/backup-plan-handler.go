@@ -26,11 +26,75 @@ func RegisterBackupPlan(app *fiber.App, s *svc.ServiceContext) {
 		web_.Route{Path: "/run/page", Permission: web_.Read, Handler: web_.HandleJSON(backupPlanLogPage(s))},
 	)
 }
+
+// RegisterRestoreTask 注册独立恢复任务接口。
+func RegisterRestoreTask(app *fiber.App, s *svc.ServiceContext) {
+	r := app.Group("/api/restore/task")
+	web_.RegisterRoutes(r, s.Auth,
+		web_.Route{Path: "/create", Permission: web_.Write, Handler: web_.HandleJSON(restoreTaskCreate(s))},
+		web_.Route{Path: "/page", Permission: web_.Read, Handler: web_.HandleJSON(restoreTaskPage(s))},
+		web_.Route{Path: "/info", Permission: web_.Read, Handler: web_.Handle(restoreTaskInfo(s))},
+		web_.Route{Path: "/log", Permission: web_.Read, Handler: web_.Handle(restoreTaskLog(s))},
+		web_.Route{Path: "/delete", Permission: web_.Write, Handler: web_.Handle(restoreTaskDelete(s))},
+	)
+}
+
+func restoreTaskCreate(s *svc.ServiceContext) func(fiber.Ctx, *logic.RestoreTaskInput) (any, error) {
+	return func(c fiber.Ctx, input *logic.RestoreTaskInput) (any, error) {
+		return logic.NewRestoreTaskService(c.Context(), s).Create(input)
+	}
+}
+
+func restoreTaskInfo(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
+	return func(c fiber.Ctx) (any, error) {
+		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
+		if err != nil {
+			return nil, error_.NewCodeTextError(code_.ParamError, "恢复任务 Id 无效")
+		}
+		return logic.NewRestoreTaskService(c.Context(), s).Info(id)
+	}
+}
+func restoreTaskPage(s *svc.ServiceContext) func(fiber.Ctx, *logic.RestoreTaskPageQuery) (any, error) {
+	return func(c fiber.Ctx, q *logic.RestoreTaskPageQuery) (any, error) {
+		return logic.NewRestoreTaskService(c.Context(), s).Page(q)
+	}
+}
+func restoreTaskLog(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
+	return func(c fiber.Ctx) (any, error) {
+		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
+		if err != nil {
+			return nil, error_.NewCodeTextError(code_.ParamError, "恢复任务 Id 无效")
+		}
+		return logic.NewRestoreTaskService(c.Context(), s).LogContent(id)
+	}
+}
+func restoreTaskDelete(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
+	return func(c fiber.Ctx) (any, error) {
+		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
+		if err != nil {
+			return nil, error_.NewCodeTextError(code_.ParamError, "恢复任务 Id 无效")
+		}
+		if err := logic.NewRestoreTaskService(c.Context(), s).Delete(id); err != nil {
+			return nil, err
+		}
+		return fiber.Map{}, nil
+	}
+}
 func backupPlanList(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 	return func(c fiber.Ctx) (any, error) {
 		return logic.NewBackupPlanService(c.Context(), s).List()
 	}
 }
+
+// backupPlanLogContent 返回指定备份运行记录的可读日志和 Restic summary。
+// @Summary 查询备份日志详情
+// @Description 返回全量可读执行日志以及解析后的 Restic summary 对象。
+// @Tags 备份计划
+// @Accept json
+// @Produce json
+// @Param id query int true "运行记录 Id"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/plan/run/log [post]
 func backupPlanLogContent(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 	return func(c fiber.Ctx) (any, error) {
 		id, err := strconv.ParseInt(c.Query("id"), 10, 64)

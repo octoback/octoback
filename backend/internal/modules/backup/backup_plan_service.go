@@ -3,6 +3,7 @@ package logic
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path"
 	"strings"
 	"time"
@@ -237,6 +238,7 @@ func (s *BackupPlanService) registerPlan(plan *models.BackupPlan) error {
 		return nil
 	}
 	return cronservice.Register("backup_plan", planId, plan.Schedule, func() {
+		log_.Logger.Info("cron 触发备份计划", zap.Int64("planId", planId))
 		if _, err := NewBackupPlanService(context.Background(), s.svcCtx).Run(planId); err != nil {
 			log_.Logger.Error("cron 触发备份计划失败", zap.Int64("planId", planId), zap.Error(err))
 		}
@@ -261,10 +263,17 @@ func (s *BackupPlanService) RegisterAll() error {
 
 func (s *BackupPlanService) Run(id int64) (map[string]any, error) {
 	now := time.Now().Unix()
-	row := &models.BackupLog{PlanId: id, Status: "queued", Progress: 0, Stage: "排队中", StartedAt: now}
+	plan, err := db_.New[models.BackupPlan](db_.NewCtx(s.ctx, s.svcCtx.Db)).GetById(id)
+	if err != nil || plan == nil {
+		return nil, error_.NewTextError("备份计划不存在: %d", id)
+	}
+	sourceId := plan.SourceId
+	repositoryId := plan.RepositoryId
+	row := &models.BackupLog{PlanId: id, SourceId: &sourceId, RepositoryId: &repositoryId, Status: "queued", Progress: 0, Stage: "排队中", StartedAt: now}
 	if err := db_.New[models.BackupLog](db_.NewCtx(s.ctx, s.svcCtx.Db)).Create(row); err != nil {
 		return nil, err
 	}
+	appendBackupLog(s.svcCtx.Db, *row.Id, "INFO", fmt.Sprintf("cron 触发备份计划，已创建运行记录：%d", *row.Id))
 	go NewBackupExecuteService(context.Background(), s.svcCtx).Execute(id, *row.Id)
 	return map[string]any{"logId": row.Id, "status": row.Status}, nil
 }
@@ -288,13 +297,21 @@ func (s *BackupPlanService) Log(id int64) (map[string]any, error) {
 // LogContent 查询指定运行记录保存的完整 Restic 输出日志。
 func (s *BackupPlanService) LogContent(id int64) (map[string]any, error) {
 	var content models.BackupLogContent
-	if err := s.svcCtx.Db.Where("backup_log_id = ?", id).First(&content).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return map[string]any{"id": id, "content": ""}, nil
-		}
+	var logRow models.BackupLog
+	if err := s.svcCtx.Db.First(&logRow, id).Error; err != nil {
 		return nil, error_.NewApiError(err)
 	}
-	return map[string]any{"id": id, "content": content.Content}, nil
+	contentResult := s.svcCtx.Db.Where("backup_log_id = ?", id).First(&content)
+	if contentResult.Error != nil && contentResult.Error != gorm.ErrRecordNotFound {
+		return nil, error_.NewApiError(contentResult.Error)
+	}
+	var summary any
+	if strings.TrimSpace(logRow.Summary) != "" {
+		if err := json.Unmarshal([]byte(logRow.Summary), &summary); err != nil {
+			return nil, error_.NewWrapError("解析 Restic summary 失败", err)
+		}
+	}
+	return map[string]any{"id": id, "content": content.Content, "summary": summary}, nil
 }
 func (s *BackupPlanService) LogPage(q *BackupLogPageQuery) (*BackupLogPageResult, error) {
 	off, lim := int64(0), int64(20)

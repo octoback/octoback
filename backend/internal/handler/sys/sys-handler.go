@@ -11,5 +11,6 @@ import (
 func Register(app *fiber.App, svcCtx *svc.ServiceContext) {
 	RegisterPlugin(app, svcCtx)
 	RegisterBackupPlan(app, svcCtx)
+	RegisterRestoreTask(app, svcCtx)
 	RegisterAudit(app, svcCtx)
 }

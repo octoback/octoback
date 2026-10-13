@@ -104,7 +104,8 @@ func TestDefinitionRejectsInvalidActionName(t *testing.T) {
 
 func TestRepositoryMetadataDeclaresMatchingAccessPlugin(t *testing.T) {
 	wantAccessTypes := map[string]string{
-		"sftp": "access.ssh",
+		"sftp":   "access.ssh",
+		"alioss": "access.aliyunAccess",
 	}
 	for repository, wantAccessType := range wantAccessTypes {
 		t.Run(repository, func(t *testing.T) {
@@ -121,13 +122,18 @@ func TestRepositoryMetadataDeclaresMatchingAccessPlugin(t *testing.T) {
 			}
 			for _, field := range definition.Metadata.Fields {
 				if field.Key == "accessId" {
+					if wantAccessType == "" {
+						t.Fatal("repository without accessType must not declare accessId")
+					}
 					if field.MergeScript == "" {
 						t.Fatal("accessId field has no mergeScript")
 					}
 					return
 				}
 			}
-			t.Fatal("accessId field not found")
+			if wantAccessType != "" {
+				t.Fatal("accessId field not found")
+			}
 		})
 	}
 }

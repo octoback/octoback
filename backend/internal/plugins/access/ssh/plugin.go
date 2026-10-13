@@ -53,6 +53,25 @@ func (s *SshAccess) ExecuteAction(ctx context.Context, action string, _ map[stri
 	return nil, plugin.NewActionNotFoundError()
 }
 
+// ListDirectoriesWithStats connects to the host and returns its child
+// directories with file and directory counts for the path selector.
+func (s *SshAccess) ListDirectoriesWithStats(ctx context.Context, remotePath string) (map[string]any, error) {
+	if err := s.Connect(ctx); err != nil {
+		return nil, err
+	}
+	defer s.Close()
+
+	paths, err := s.ListDirectories(remotePath)
+	if err != nil {
+		return nil, err
+	}
+	fileCount, directoryCount, err := s.CountDirectory(ctx, remotePath)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"paths": paths, "fileCount": fileCount, "directoryCount": directoryCount}, nil
+}
+
 func (s *SshAccess) Test(ctx context.Context) error {
 	if err := s.Connect(ctx); err != nil {
 		return error_.NewWrapError("SSH 连接测试失败", err)

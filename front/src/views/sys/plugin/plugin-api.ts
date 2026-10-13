@@ -54,6 +54,8 @@ export const refreshPluginInstanceRepositoryData = (id: string | number) => requ
 export const checkPluginInstanceRepository = (id: string | number) => request({ url: `/plugin/instance/check?id=${id}`, method: "post", data: {} });
 export const getPluginInstanceSnapshotBrowser = (id: string | number, snapshotId: string) =>
   request({ url: `/plugin/instance/snapshot-browser?id=${id}&snapshotId=${encodeURIComponent(snapshotId)}`, method: "post", data: {} });
+export const forgetPluginInstanceSnapshot = (id: string | number, snapshotId: string) =>
+  request({ url: `/plugin/instance/forget-snapshot?id=${id}&snapshotId=${encodeURIComponent(snapshotId)}`, method: "post", data: {} });
 export const getPluginInstanceSimpleByIds = (ids: number[]): Promise<PluginInstanceSimple[]> => request({ url: "/plugin/instance/simpleByIds", method: "post", data: { ids } });
 export const createPluginInstance = (data: { name: string; pluginType: string; pluginName: string; config: Record<string, unknown>; description?: string }) =>
   request({ url: "/plugin/instance/create", method: "post", data });

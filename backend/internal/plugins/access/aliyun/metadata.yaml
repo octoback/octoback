@@ -1,0 +1,24 @@
+type: access
+name: access.aliyunAccess
+title: 阿里云授权
+description: 阿里云 OSS AccessKey 授权
+version: 1.0.0
+fields:
+  - key: accessKeyId
+    title: AccessKey ID
+    type: password
+    encrypt: true
+    required: true
+  - key: accessKeySecret
+    title: AccessKey Secret
+    type: password
+    encrypt: true
+    required: true
+  - key: testButton
+    title: 测试授权
+    type: text
+    component: {name: plugin-test-button, action: onTest, text: 测试授权}
+actions:
+  - name: onTest
+    title: 测试授权
+    permission: write

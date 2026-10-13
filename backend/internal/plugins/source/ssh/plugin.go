@@ -68,10 +68,6 @@ func (e *SshSource) onListPaths(ctx context.Context, form map[string]any) (any, 
 		return nil, error_.NewWrapError("创建 SSH 授权插件实例失败", err)
 	}
 	client := instance.(*sshaccess.SshAccess)
-	if err := client.Connect(ctx); err != nil {
-		return nil, err
-	}
-	defer client.Close()
 	remotePath := strings.TrimSpace(fmt.Sprint(form["path"]))
 	if remotePath == "<nil>" || remotePath == "" {
 		remotePath = strings.TrimSpace(fmt.Sprint(form["cursor"]))
@@ -79,13 +75,5 @@ func (e *SshSource) onListPaths(ctx context.Context, form map[string]any) (any, 
 	if remotePath == "<nil>" || remotePath == "" {
 		remotePath = "/"
 	}
-	paths, err := client.ListDirectories(remotePath)
-	if err != nil {
-		return nil, err
-	}
-	fileCount, directoryCount, err := client.CountDirectory(ctx, remotePath)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"paths": paths, "fileCount": fileCount, "directoryCount": directoryCount}, nil
+	return client.ListDirectoriesWithStats(ctx, remotePath)
 }

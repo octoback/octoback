@@ -90,7 +90,7 @@ func main() {
 			return
 		}
 	}
-	if err := db_.Migrate(database, &models.User{}, &models.SysSetting{}, &models.PluginInstance{}, &models.BackupPlan{}, &models.BackupLog{}, &models.BackupLogContent{}, &models.AuditLog{}, &models.RepoDataInfo{}); err != nil {
+	if err := db_.Migrate(database, &models.User{}, &models.SysSetting{}, &models.PluginInstance{}, &models.BackupPlan{}, &models.BackupLog{}, &models.BackupLogContent{}, &models.RestoreTask{}, &models.RestoreTaskContent{}, &models.AuditLog{}, &models.RepoDataInfo{}); err != nil {
 		log_.Logger.Error("初始化数据库失败", zap.Error(err))
 		return
 	}
