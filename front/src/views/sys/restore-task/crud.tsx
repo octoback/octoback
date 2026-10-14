@@ -3,13 +3,31 @@ import { Modal } from "ant-design-vue";
 import { h } from "vue";
 import { deleteRestoreTask, getRestoreTaskLog, getRestoreTaskPage, type RestoreTask } from "./api";
 
+const logLevelPattern = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \[(INFO|WARN|ERROR)\] (.*)$/;
+
+function renderLogContent(content: string) {
+  return content.split("\n").map((line, index) => {
+    const match = logLevelPattern.exec(line);
+    if (!match) {
+      return h("div", { key: index, class: "restore-task-log-line restore-task-log-line-plain" }, line || " ");
+    }
+    const [, timestamp, level, message] = match;
+    return h("div", { key: index, class: `restore-task-log-line restore-task-log-level-${level.toLowerCase()}` }, [
+      h("span", { class: "restore-task-log-time" }, timestamp),
+      h("span", { class: "restore-task-log-level" }, level),
+      h("span", { class: "restore-task-log-message" }, message)
+    ]);
+  });
+}
+
 export default function (): CreateCrudOptionsRet<RestoreTask> {
   const showLog = async (row: RestoreTask) => {
     const result = (await getRestoreTaskLog(row.id)) as { content?: string };
     Modal.info({
       title: `恢复日志 - 任务 ${row.id}`,
-      width: 860,
-      content: h("pre", { style: { maxHeight: "560px", overflow: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word" } }, result.content || "暂无 Restic 日志")
+      width: 980,
+      wrapClassName: "restore-task-log-modal",
+      content: h("div", { class: "restore-task-log-terminal" }, renderLogContent(result.content || "暂无恢复执行日志"))
     });
   };
   return {

@@ -18,57 +18,61 @@ defineOptions({ name: "BackupLog" });
 
 .backup-log-modal {
   .ant-modal-content {
-    background: #111315;
-    color: #e8eaed;
-  }
-
-  .ant-modal-header {
-    background: #111315;
-    border-bottom-color: #2d3238;
-  }
-
-  .ant-modal-title,
-  .ant-modal-close {
-    color: #e8eaed;
-  }
-
-  .ant-modal-body {
-    padding: 0;
-  }
-
-  .ant-modal-confirm-body-wrapper {
-    margin: 0;
+    background: #fff;
+    color: rgba(0, 0, 0, 0.88);
   }
 }
 
 .backup-log-modal-content {
-  background: #111315;
-  padding: 0 18px 18px;
+  padding: 0;
 }
 
-.backup-log-summary {
-  border-bottom: 1px solid #2d3238;
-  color: #c8cdd3;
-  padding: 14px 0;
+.backup-log-summary-dialog {
+  max-height: 560px;
+  overflow: auto;
+  padding: 4px 2px;
 }
 
 .backup-log-summary-title {
-  color: #f0f2f4;
+  color: rgba(0, 0, 0, 0.88);
   font-size: 13px;
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: 14px;
 }
 
 .backup-log-summary-grid {
+  border-top: 1px solid #f0f0f0;
   display: grid;
-  gap: 6px 18px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.backup-log-summary-item {
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.backup-log-summary-snapshot {
+  grid-column: span 2;
+}
+
+.backup-log-summary-key {
+  color: rgba(0, 0, 0, 0.45);
   font-size: 12px;
 }
 
+.backup-log-summary-value {
+  color: rgba(0, 0, 0, 0.88);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
 .backup-log-summary-empty {
-  color: #7f8790;
+  color: rgba(0, 0, 0, 0.45);
   font-size: 12px;
 }
 
@@ -87,6 +91,16 @@ defineOptions({ name: "BackupLog" });
   padding: 14px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+@media (max-width: 640px) {
+  .backup-log-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .backup-log-summary-snapshot {
+    grid-column: span 2;
+  }
 }
 
 .backup-log-line {

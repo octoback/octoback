@@ -3,11 +3,15 @@ package logic
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
 	"gorm.io/gorm"
+
 	"handfree-work/octo-backup/internal/base/error_"
+	"handfree-work/octo-backup/internal/base/log_"
 	"handfree-work/octo-backup/internal/models"
 	backup "handfree-work/octo-backup/internal/modules/backup/restic"
 	pluginservice "handfree-work/octo-backup/internal/modules/plugin/service"
@@ -52,8 +56,35 @@ func NewRestoreTaskService(ctx context.Context, s *svc.ServiceContext) *RestoreT
 	return &RestoreTaskService{ctx: ctx, svcCtx: s}
 }
 
+func appendRestoreTaskLog(db *gorm.DB, taskId int64, level, message string) {
+	if db == nil || taskId <= 0 || strings.TrimSpace(message) == "" {
+		return
+	}
+	entry := backupLogEntry(level, message)
+	var content models.RestoreTaskContent
+	result := db.Where("restore_task_id = ?", taskId).First(&content)
+	if result.Error == gorm.ErrRecordNotFound {
+		content = models.RestoreTaskContent{RestoreTaskId: taskId, Content: entry}
+		if err := db.Create(&content).Error; err != nil {
+			log_.Logger.Warn("创建恢复任务日志失败", zap.Int64("restoreTaskId", taskId), zap.Error(err))
+		}
+		return
+	}
+	if result.Error != nil {
+		log_.Logger.Warn("读取恢复任务日志失败", zap.Int64("restoreTaskId", taskId), zap.Error(result.Error))
+		return
+	}
+	content.Content += entry
+	if err := db.Model(&models.RestoreTaskContent{}).Where("restore_task_id = ?", taskId).Update("content", content.Content).Error; err != nil {
+		log_.Logger.Warn("追加恢复任务日志失败", zap.Int64("restoreTaskId", taskId), zap.Error(err))
+	}
+}
+
 // Create 创建恢复任务并异步执行。
 func (s *RestoreTaskService) Create(in *RestoreTaskInput) (map[string]any, error) {
+	if in != nil {
+		log_.Logger.Info("收到恢复任务请求", zap.Int64("repositoryId", in.RepositoryId), zap.String("snapshotId", in.SnapshotId), zap.Int64("targetAccessId", in.TargetAccessId), zap.String("targetPath", in.TargetPath), zap.Int("selectedPathCount", len(in.SelectedPaths)))
+	}
 	if in == nil || in.RepositoryId <= 0 || strings.TrimSpace(in.SnapshotId) == "" || strings.TrimSpace(in.TargetPath) == "" || len(in.SelectedPaths) == 0 {
 		return nil, error_.NewTextError("恢复仓库、快照、目标主机、目标目录和恢复路径不能为空")
 	}
@@ -105,14 +136,22 @@ func (s *RestoreTaskService) Create(in *RestoreTaskInput) (map[string]any, error
 	if err := s.svcCtx.Db.Create(task).Error; err != nil {
 		return nil, error_.NewWrapError("创建恢复任务失败", err)
 	}
+	appendRestoreTaskLog(s.svcCtx.Db, *task.Id, "INFO", fmt.Sprintf("恢复任务已创建：任务 Id %d，仓库 %s，快照 %s", *task.Id, repository.Name, task.SnapshotId))
+	appendRestoreTaskLog(s.svcCtx.Db, *task.Id, "INFO", fmt.Sprintf("恢复目标：主机 %s，目录 %s，选择 %d 个路径", target.Name, task.TargetPath, len(in.SelectedPaths)))
+	log_.Logger.Info("恢复任务已创建", zap.Int64("restoreTaskId", *task.Id), zap.Int64("repositoryId", task.RepositoryId), zap.Int64("targetAccessId", task.TargetAccessId), zap.String("snapshotId", task.SnapshotId))
 	go NewRestoreTaskService(context.Background(), s.svcCtx).execute(*task.Id)
 	return map[string]any{"id": task.Id, "status": task.Status}, nil
 }
 
 func (s *RestoreTaskService) execute(id int64) {
 	var task models.RestoreTask
-	if s.svcCtx.Db.First(&task, id).Error != nil {
+	if err := s.svcCtx.Db.First(&task, id).Error; err != nil {
+		log_.Logger.Error("读取恢复任务失败", zap.Int64("restoreTaskId", id), zap.Error(err))
 		return
+	}
+	started := time.Now()
+	appendLog := func(level, message string) {
+		appendRestoreTaskLog(s.svcCtx.Db, id, level, message)
 	}
 	update := func(status, stage, message string) {
 		fields := map[string]any{"status": status, "stage": stage, "error": message}
@@ -121,38 +160,83 @@ func (s *RestoreTaskService) execute(id int64) {
 			fields["finished_at"] = now
 			fields["progress"] = 100
 		}
-		_ = s.svcCtx.Db.Model(&models.RestoreTask{}).Where("id = ?", id).Updates(fields).Error
+		if status == "running" {
+			fields["progress"] = 5
+		}
+		if err := s.svcCtx.Db.Model(&models.RestoreTask{}).Where("id = ?", id).Updates(fields).Error; err != nil {
+			log_.Logger.Error("更新恢复任务状态失败", zap.Int64("restoreTaskId", id), zap.String("status", status), zap.Error(err))
+		}
+		level := "INFO"
+		if status == "failed" {
+			level = "ERROR"
+		}
+		messageText := "恢复阶段：" + stage
+		if message != "" {
+			messageText += "；原因：" + message
+		}
+		if status == "success" {
+			messageText = fmt.Sprintf("恢复成功，耗时 %.1f 秒", time.Since(started).Seconds())
+		}
+		appendLog(level, messageText)
 	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			message := fmt.Sprintf("恢复流程发生异常：%v", recovered)
+			log_.Logger.Error("恢复任务异常结束", zap.Int64("restoreTaskId", id), zap.Any("panic", recovered))
+			update("failed", "异常结束", message)
+		}
+	}()
+	appendLog("INFO", fmt.Sprintf("开始执行恢复任务：仓库 %s，快照 %s，目标主机 %s，目标目录 %s", task.RepositoryName, task.SnapshotId, task.TargetAccessName, task.TargetPath))
 	update("running", "准备恢复环境", "")
 	service := pluginservice.NewPluginInstanceService(s.ctx, s.svcCtx)
+	appendLog("INFO", "开始加载并校验存储仓库配置")
 	repositoryConfig, err := service.ResticRepositoryConfig(task.RepositoryId)
 	if err != nil {
+		appendLog("ERROR", "加载存储仓库配置失败："+err.Error())
 		update("failed", "加载仓库", err.Error())
 		return
 	}
+	appendLog("INFO", "存储仓库配置加载完成")
+	appendLog("INFO", fmt.Sprintf("开始加载恢复目标主机授权：%d", task.TargetAccessId))
 	accessPlugin, err := service.Instance(task.TargetAccessId)
 	if err != nil {
+		appendLog("ERROR", "加载目标主机授权失败："+err.Error())
 		update("failed", "加载目标主机", err.Error())
 		return
 	}
 	targetAccess, ok := accessPlugin.(*sshaccess.SshAccess)
 	if !ok {
+		appendLog("ERROR", "目标主机授权类型无效")
 		update("failed", "校验目标主机", "目标主机授权类型无效")
 		return
 	}
 	var paths []string
-	if json.Unmarshal([]byte(task.SelectedPaths), &paths) != nil {
+	if err := json.Unmarshal([]byte(task.SelectedPaths), &paths); err != nil {
+		appendLog("ERROR", "解析恢复路径失败："+err.Error())
 		update("failed", "解析恢复路径", "恢复路径格式无效")
 		return
 	}
+	appendLog("INFO", fmt.Sprintf("恢复路径解析完成：%d 个路径", len(paths)))
 	repositoryConfig.Environment = backup.RemoteResticEnvironment
 	repositoryConfig.ExecutionAccess = targetAccess
 	repositoryConfig.Version = s.svcCtx.Restic.Version
 	repositoryConfig.RemoteDirectory = ".octo_backup"
+	repositoryConfig.Log = appendLog
+	repositoryConfig.Progress = func(progress int, stage string) {
+		if progress < 5 {
+			progress = 5
+		}
+		fields := map[string]any{"status": "running", "progress": progress, "stage": stage}
+		if err := s.svcCtx.Db.Model(&models.RestoreTask{}).Where("id = ?", id).Updates(fields).Error; err != nil {
+			log_.Logger.Warn("更新恢复进度失败", zap.Int64("restoreTaskId", id), zap.Int("progress", progress), zap.Error(err))
+		}
+		appendLog("INFO", fmt.Sprintf("恢复进度：%d%%，阶段：%s", progress, stage))
+	}
 	client := backup.NewResticClient(s.svcCtx, repositoryConfig)
-	output, err := client.Restore(s.ctx, backup.RestoreRequest{SnapshotId: task.SnapshotId, TargetPath: task.TargetPath, IncludePaths: paths})
-	_ = s.svcCtx.Db.Model(&models.RestoreTaskContent{}).Where("restore_task_id = ?", id).Assign(map[string]any{"content": output}).FirstOrCreate(&models.RestoreTaskContent{RestoreTaskId: id, Content: output}).Error
+	appendLog("INFO", "Restic 恢复客户端已创建，开始执行恢复")
+	_, err = client.Restore(s.ctx, backup.RestoreRequest{SnapshotId: task.SnapshotId, TargetPath: task.TargetPath, IncludePaths: paths})
 	if err != nil {
+		appendLog("ERROR", "Restic 恢复执行失败："+err.Error())
 		update("failed", "执行恢复", err.Error())
 		return
 	}
@@ -168,7 +252,7 @@ func (s *RestoreTaskService) Info(id int64) (map[string]any, error) {
 	return s.present(&row), nil
 }
 
-// LogContent 查询恢复任务保存的完整 Restic 输出。
+// LogContent 查询恢复任务保存的完整可读执行日志。
 func (s *RestoreTaskService) LogContent(id int64) (map[string]any, error) {
 	var content models.RestoreTaskContent
 	if err := s.svcCtx.Db.Where("restore_task_id = ?", id).First(&content).Error; err != nil {

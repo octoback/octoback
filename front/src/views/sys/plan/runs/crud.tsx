@@ -6,25 +6,81 @@ import { getBackupRunLog, getBackupRunPage, type BackupLog, type BackupRunLogDet
 
 const logLevelPattern = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \[(INFO|WARN|ERROR)\] (.*)$/;
 
-function formatSummaryValue(key: string, value: unknown) {
-  const labels: Record<string, string> = {
-    snapshot_id: "快照 ID",
-    total_files_processed: "处理文件",
-    total_bytes_processed: "处理字节",
-    total_duration: "耗时（秒）",
-    files_new: "新增文件",
-    files_changed: "变更文件",
-    files_unmodified: "未变更文件",
-    dirs_new: "新增目录",
-    dirs_changed: "变更目录",
-    dirs_unmodified: "未变更目录"
-  };
-  const label = labels[key] || key;
-  let renderedValue = String(value);
-  if (typeof value === "object") {
-    renderedValue = JSON.stringify(value);
+function formatSummaryDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
   }
-  return `${label}: ${renderedValue}`;
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+const summaryLabels: Record<string, string> = {
+  backup_start: "开始时间",
+  backup_end: "结束时间",
+  snapshot_id: "快照 ID",
+  total_files_processed: "处理文件",
+  total_bytes_processed: "处理字节",
+  total_duration: "耗时（秒）",
+  files_new: "新增文件",
+  files_changed: "变更文件",
+  files_unmodified: "未变更文件",
+  dirs_new: "新增目录",
+  dirs_changed: "变更目录",
+  dirs_unmodified: "未变更目录"
+};
+
+function formatSummaryValue(key: string, value: unknown) {
+  let renderedValue = String(value);
+  if ((key === "backup_start" || key === "backup_end") && typeof value === "string") {
+    renderedValue = formatSummaryDate(value);
+  }
+  if (typeof value === "object") {
+    renderedValue = JSON.stringify(value, null, 2);
+  }
+  return renderedValue;
+}
+
+function formatSummaryLabel(key: string) {
+  return summaryLabels[key] || key;
+}
+
+function getSummaryEntries(summary: Record<string, unknown>) {
+  const preferredKeys = [
+    "backup_start",
+    "backup_end",
+    "snapshot_id",
+    "total_files_processed",
+    "total_bytes_processed",
+    "total_duration",
+    "files_new",
+    "files_changed",
+    "files_unmodified",
+    "dirs_new",
+    "dirs_changed",
+    "dirs_unmodified"
+  ];
+  const entries = Object.entries(summary);
+  const preferredEntries = preferredKeys.filter((key) => Object.prototype.hasOwnProperty.call(summary, key)).map((key) => [key, summary[key]] as [string, unknown]);
+  const preferredSet = new Set(preferredKeys);
+  return preferredEntries.concat(entries.filter(([key]) => !preferredSet.has(key)));
+}
+
+function renderSummary(summary: Record<string, unknown>) {
+  const entries = getSummaryEntries(summary);
+  if (entries.length === 0) {
+    return h("span", { class: "backup-log-summary-empty" }, "暂无 summary");
+  }
+  return h(
+    "div",
+    { class: "backup-log-summary-grid" },
+    entries.map(([key, value]) =>
+      h("div", { key, class: ["backup-log-summary-item", key === "snapshot_id" && "backup-log-summary-snapshot"] }, [
+        h("span", { class: "backup-log-summary-key" }, formatSummaryLabel(key)),
+        h("span", { class: "backup-log-summary-value" }, formatSummaryValue(key, value))
+      ])
+    )
+  );
 }
 
 function renderLogContent(content: string) {
@@ -48,29 +104,27 @@ export default function (): CreateCrudOptionsRet<BackupLog> {
       window.location.hash = `#/sys/repository/${row.repositoryId}`;
     }
   };
-  const openResticLog = async (row: BackupLog) => {
-    const response = (await getBackupRunLog(row.id)) as BackupRunLogDetail;
-    const content = response.content || "暂无备份执行日志";
+  const loadLogDetail = async (row: BackupLog) => {
+    return (await getBackupRunLog(row.id)) as BackupRunLogDetail;
+  };
+  const openSummary = async (row: BackupLog) => {
+    const response = await loadLogDetail(row);
     const summary = response.summary || {};
-    const summaryEntries = Object.entries(summary);
     Modal.info({
-      title: `备份日志 - ${row.planName || `运行记录 ${row.id}`}`,
+      title: `备份 Summary - ${row.planName || `运行记录 ${row.id}`}`,
+      width: 820,
+      wrapClassName: "backup-log-modal",
+      content: () => h("div", { class: "backup-log-summary-dialog" }, [h("div", { class: "backup-log-summary-title" }, "Restic Summary"), renderSummary(summary)])
+    });
+  };
+  const openResticLog = async (row: BackupLog) => {
+    const response = await loadLogDetail(row);
+    const content = response.content || "暂无备份执行日志";
+    Modal.info({
+      title: `执行日志 - ${row.planName || `运行记录 ${row.id}`}`,
       width: 980,
       wrapClassName: "backup-log-modal",
-      content: () => {
-        let summaryContent = h("span", { class: "backup-log-summary-empty" }, "暂无 summary");
-        if (summaryEntries.length > 0) {
-          summaryContent = h(
-            "div",
-            { class: "backup-log-summary-grid" },
-            summaryEntries.map(([key, value]) => h("span", { key }, formatSummaryValue(key, value)))
-          );
-        }
-        return h("div", { class: "backup-log-modal-content" }, [
-          h("div", { class: "backup-log-summary" }, [h("div", { class: "backup-log-summary-title" }, "Restic Summary"), summaryContent]),
-          h("div", { class: "backup-log-terminal" }, renderLogContent(content))
-        ]);
-      }
+      content: () => h("div", { class: "backup-log-modal-content" }, [h("div", { class: "backup-log-terminal" }, renderLogContent(content))])
     });
   };
   return {
@@ -86,7 +140,7 @@ export default function (): CreateCrudOptionsRet<BackupLog> {
       },
       rowHandle: {
         fixed: "right",
-        width: 90,
+        width: 160,
         buttons: {
           view: { show: false },
           copy: { show: false },
@@ -99,6 +153,14 @@ export default function (): CreateCrudOptionsRet<BackupLog> {
             type: "link",
             icon: "ion:folder-open-outline",
             click: ({ row }: { row: BackupLog }) => openRepository(row)
+          },
+          summary: {
+            show: true,
+            text: "",
+            title: "查看备份 Summary",
+            type: "link",
+            icon: "ion:stats-chart-outline",
+            click: ({ row }: { row: BackupLog }) => openSummary(row)
           },
           log: {
             show: true,

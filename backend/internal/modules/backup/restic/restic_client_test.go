@@ -50,6 +50,22 @@ func TestBackupSummaryExtractsSnapshotId(t *testing.T) {
 	}
 }
 
+func TestLogRestoreOutputFormatsEventsAndClassifiesText(t *testing.T) {
+	var entries []string
+	client := &ResticClient{config: ClientConfig{Log: func(level, message string) {
+		entries = append(entries, level+":"+message)
+	}}}
+	client.logRestoreOutput([]byte("restoring <data/file.txt>\nwarning: skipped special file\nFatal: permission denied\n"))
+	want := []string{
+		"INFO:Restic 输出：restoring <data/file.txt>",
+		"WARN:Restic 输出：warning: skipped special file",
+		"ERROR:Restic 输出：Fatal: permission denied",
+	}
+	if !reflect.DeepEqual(entries, want) {
+		t.Fatalf("日志级别和内容 = %#v, want %#v", entries, want)
+	}
+}
+
 func TestForgetSnapshotPrunesSelectedSnapshot(t *testing.T) {
 	config := ClientConfig{Environment: LocalResticEnvironment, RepositoryURL: "s3:https://example.test/repo", RepositoryPassword: "password"}
 	client := NewResticClient(nil, config)

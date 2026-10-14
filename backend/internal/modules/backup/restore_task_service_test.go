@@ -3,7 +3,9 @@ package logic
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"handfree-work/octo-backup/internal/base/db_"
 	"handfree-work/octo-backup/internal/models"
@@ -25,6 +27,47 @@ func newRestoreTaskTestService(t *testing.T) *RestoreTaskService {
 		t.Fatal(err)
 	}
 	return NewRestoreTaskService(context.Background(), &svc.ServiceContext{Db: database})
+}
+
+func TestAppendRestoreTaskLogAddsFormattedEntries(t *testing.T) {
+	service := newRestoreTaskTestService(t)
+	task := models.RestoreTask{SnapshotId: "snapshot-log", TargetPath: "/restore", Status: "running"}
+	if err := service.svcCtx.Db.Create(&task).Error; err != nil {
+		t.Fatal(err)
+	}
+	appendRestoreTaskLog(service.svcCtx.Db, *task.Id, "INFO", "开始恢复")
+	appendRestoreTaskLog(service.svcCtx.Db, *task.Id, "ERROR", "恢复失败")
+
+	var content models.RestoreTaskContent
+	if err := service.svcCtx.Db.Where("restore_task_id = ?", *task.Id).First(&content).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{" [INFO] 开始恢复", " [ERROR] 恢复失败"} {
+		if !strings.Contains(content.Content, expected) {
+			t.Fatalf("恢复日志未追加 %q: %q", expected, content.Content)
+		}
+	}
+	if !strings.HasSuffix(content.Content, "\n") {
+		t.Fatalf("恢复日志应以换行结束: %q", content.Content)
+	}
+	if _, err := time.Parse("2006-01-02 15:04:05.000", content.Content[:23]); err != nil {
+		t.Fatalf("恢复日志时间格式错误: %v", err)
+	}
+}
+
+func TestRestoreLogContentReturnsEmptyForRunningTask(t *testing.T) {
+	service := newRestoreTaskTestService(t)
+	task := models.RestoreTask{SnapshotId: "snapshot-running", TargetPath: "/restore", Status: "running"}
+	if err := service.svcCtx.Db.Create(&task).Error; err != nil {
+		t.Fatal(err)
+	}
+	detail, err := service.LogContent(*task.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail["content"] != "" {
+		t.Fatalf("运行中的任务初始日志应为空: %#v", detail)
+	}
 }
 
 func TestRestoreTaskPageFiltersAndPaginates(t *testing.T) {

@@ -186,9 +186,13 @@ func StringSlice(value any) []string {
 func (p *ResticClient) Restore(ctx context.Context, request RestoreRequest) (string, error) {
 	defer p.executor.Close()
 	if strings.TrimSpace(p.repositoryURL()) == "" || p.config.RepositoryPassword == "" || strings.TrimSpace(request.SnapshotId) == "" || strings.TrimSpace(request.TargetPath) == "" {
+		p.log("ERROR", "Restic 恢复参数不完整")
 		return "", error_.NewTextError("restic 还原参数不完整")
 	}
+	started := time.Now()
+	p.log("INFO", fmt.Sprintf("Restic 恢复开始：快照 %s，目标目录 %s，选择 %d 个路径", request.SnapshotId, request.TargetPath, len(request.IncludePaths)))
 	if err := p.prepareEnvironment(ctx); err != nil {
+		p.log("ERROR", "准备 Restic 恢复环境失败："+err.Error())
 		return "", err
 	}
 	executor := p.executor
@@ -199,11 +203,47 @@ func (p *ResticClient) Restore(ctx context.Context, request RestoreRequest) (str
 		}
 	}
 	log_.Logger.Info("执行 Restic 快照还原", zap.String("snapshotId", request.SnapshotId), zap.String("targetPath", request.TargetPath))
+	p.log("INFO", "Restic 执行环境准备完成，开始执行 restore 命令")
 	output, err := executor.Execute(ctx, args, p.repositoryEnvironment())
+	p.logRestoreOutput(output)
 	if err != nil {
+		p.log("ERROR", fmt.Sprintf("Restic 恢复命令失败，耗时 %.1f 秒：%v", time.Since(started).Seconds(), err))
 		return strings.TrimSpace(string(output)), err
 	}
+	p.log("INFO", fmt.Sprintf("Restic 恢复命令执行完成，耗时 %.1f 秒", time.Since(started).Seconds()))
 	return strings.TrimSpace(string(output)), nil
+}
+
+func (p *ResticClient) logRestoreOutput(output []byte) {
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		level, message, _, recognized := FormatResticEvent(line)
+		if recognized {
+			p.log(level, message)
+			if level == "INFO" && strings.HasPrefix(message, "Restic 进度 ") && p.config.Progress != nil {
+				var event map[string]any
+				if json.Unmarshal([]byte(line), &event) == nil {
+					if percent, ok := numberValue(event["percent_done"]); ok {
+						p.config.Progress(int(percent*100), "Restic 恢复中")
+					}
+				}
+			}
+			continue
+		}
+		lowerLine := strings.ToLower(line)
+		if strings.HasPrefix(lowerLine, "error:") || strings.HasPrefix(lowerLine, "fatal:") {
+			p.log("ERROR", "Restic 输出："+line)
+			continue
+		}
+		if strings.HasPrefix(lowerLine, "warning:") {
+			p.log("WARN", "Restic 输出："+line)
+			continue
+		}
+		p.log("INFO", "Restic 输出："+line)
+	}
 }
 
 // Backup 准备远程 Restic 运行环境，按需初始化仓库并执行备份。

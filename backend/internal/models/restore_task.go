@@ -25,11 +25,11 @@ type RestoreTask struct {
 
 func (RestoreTask) TableName() string { return "restore_task" }
 
-// RestoreTaskContent 保存恢复任务产生的完整命令输出。
+// RestoreTaskContent 保存恢复任务产生的完整可读执行日志。
 type RestoreTaskContent struct {
 	db_.BaseModel
 	RestoreTaskId int64  `json:"restoreTaskId" gorm:"not null;uniqueIndex"`
-	Content       string `json:"content" gorm:"type:text"`
+	Content       string `json:"content" gorm:"type:longtext"`
 }
 
 func (RestoreTaskContent) TableName() string { return "restore_task_content" }
