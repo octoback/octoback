@@ -1,19 +1,31 @@
 <template>
   <div class="plugin-path-selector component-plugin-path-selector">
-    <div class="plugin-path-selector__actions">
+    <div v-if="multiple" class="plugin-path-selector__actions">
       <a-button :disabled="!instanceId" @click="openPicker">选择目录</a-button>
       <span v-if="!instanceId" class="plugin-path-selector__hint">保存来源后可浏览 SSH 目录</span>
     </div>
-    <a-textarea :value="formatPathInput(modelValue)" :placeholder="placeholder" :auto-size="{ minRows: 3, maxRows: 8 }" @update:value="onInput" />
+    <a-input-group v-else compact class="plugin-path-selector__single-input">
+      <a-input :value="formatPathInput(modelValue)" :placeholder="placeholder" readonly />
+      <a-button :disabled="!instanceId" @click="openPicker">选择目录</a-button>
+    </a-input-group>
+    <a-textarea v-if="multiple" :value="formatPathInput(modelValue)" :placeholder="placeholder" :auto-size="{ minRows: 3, maxRows: 8 }" @update:value="onInput" />
     <a-modal v-model:open="pickerOpen" destroy-on-close wrap-class-name="plugin-path-selector__modal" :title="modalTitle" :confirm-loading="loading" @ok="confirmSelection">
       <a-alert v-if="errorMessage" type="error" :message="errorMessage" show-icon />
-      <div v-if="selectedPaths.length" class="plugin-path-selector__selected">
+      <div v-if="multiple && selectedPaths.length" class="plugin-path-selector__selected">
         <span class="plugin-path-selector__selected-label">已选择：</span>
         <a-tag v-for="path in visibleSelectedPaths" :key="path" type="primary" color="blue" closable @close="removeSelectedPath(path)">{{ path }}</a-tag>
         <a-tag v-if="selectedPaths.length > visibleSelectedPaths.length" type="primary" color="blue">+{{ selectedPaths.length - visibleSelectedPaths.length }}</a-tag>
       </div>
       <a-spin :spinning="loading">
-        <a-tree v-model:checked-keys="checkedKeys" checkable :check-strictly="true" block-node :tree-data="treeData" :field-names="treeFieldNames" :load-data="loadData">
+        <a-tree v-if="multiple" v-model:checked-keys="checkedKeys" checkable :check-strictly="true" block-node :tree-data="treeData" :field-names="treeFieldNames" :load-data="loadData">
+          <template #title="node">
+            <span class="plugin-path-selector__tree-title">
+              <span class="plugin-path-selector__tree-path">{{ node.title }}</span>
+              <span v-if="hasNodeCounts(node)" class="plugin-path-selector__tree-count">共 {{ node.fileCount + node.directoryCount }} 项</span>
+            </span>
+          </template>
+        </a-tree>
+        <a-tree v-else v-model:selected-keys="selectedKeys" block-node :tree-data="treeData" :field-names="treeFieldNames" :load-data="loadData" @select="onSingleSelect">
           <template #title="node">
             <span class="plugin-path-selector__tree-title">
               <span class="plugin-path-selector__tree-path">{{ node.title }}</span>
@@ -35,7 +47,8 @@ import { computed, ref } from "vue";
 import { executePluginInstanceAction } from "/src/views/sys/plugin/plugin-api";
 import { formatPathInput, getDirectoryRequestPath, normalizePathNodes, parsePathInput, updatePathNodeChildren, updatePathNodeCounts, type PluginPathNode } from "./helpers";
 
-const props = withDefaults(defineProps<{ modelValue?: string | string[]; placeholder?: string; modalTitle?: string; instanceId?: string | number; action?: string; accessId?: string | number }>(), {
+const props = withDefaults(defineProps<{ modelValue?: string | string[]; multiple?: boolean; placeholder?: string; modalTitle?: string; instanceId?: string | number; action?: string; accessId?: string | number }>(), {
+  multiple: true,
   placeholder: "选择目录或粘贴路径，每行一个",
   modalTitle: "选择备份目录",
   action: "onListPaths"
@@ -46,6 +59,7 @@ const loading = ref(false);
 const errorMessage = ref("");
 const treeData = ref<PluginPathNode[]>([]);
 const checkedKeys = ref<string[] | { checked: string[]; halfChecked: string[] }>([]);
+const selectedKeys = ref<string[]>([]);
 const treeFieldNames = { title: "title", key: "key", children: "children" };
 const selectedPaths = computed(() => (Array.isArray(checkedKeys.value) ? checkedKeys.value : checkedKeys.value.checked));
 const visibleSelectedPaths = computed(() => selectedPaths.value.slice(0, 3));
@@ -64,7 +78,11 @@ async function openPicker() {
     const rootNode: PluginPathNode = { title: "/", key: "/", isLeaf: false, children: normalizePathNodes(result) };
     treeData.value = [rootNode];
     updatePathNodeCounts(treeData.value, "/", result);
-    checkedKeys.value = parsePathInput(props.modelValue);
+    if (props.multiple) {
+      checkedKeys.value = parsePathInput(props.modelValue);
+    } else {
+      selectedKeys.value = parsePathInput(props.modelValue).slice(0, 1);
+    }
   } catch (error: any) {
     errorMessage.value = error?.message || "读取 SSH 目录失败";
   } finally {
@@ -92,9 +110,17 @@ async function loadData(node: PluginPathNode & { children?: PluginPathNode[] }) 
   }
 }
 function confirmSelection() {
+  if (!props.multiple) {
+    emit("update:modelValue", selectedKeys.value.slice(0, 1));
+    pickerOpen.value = false;
+    return;
+  }
   const selectedKeys = Array.isArray(checkedKeys.value) ? checkedKeys.value : checkedKeys.value.checked;
   emit("update:modelValue", parsePathInput(selectedKeys));
   pickerOpen.value = false;
+}
+function onSingleSelect(keys: string[]) {
+  selectedKeys.value = keys.slice(0, 1);
 }
 function removeSelectedPath(path: string) {
   const remainingPaths = selectedPaths.value.filter((selectedPath) => selectedPath !== path);
@@ -113,6 +139,13 @@ function hasNodeCounts(node: PluginPathNode) {
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+  .plugin-path-selector__single-input {
+    display: flex;
+    width: 100%;
+    .ant-input {
+      flex: 1;
+    }
   }
   .plugin-path-selector__hint {
     color: #8c8c8c;

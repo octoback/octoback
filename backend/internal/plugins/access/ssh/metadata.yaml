@@ -15,3 +15,4 @@ fields:
   - {key: testButton, title: 测试连接, type: text, component: {name: plugin-test-button, action: onTest, text: 测试连接}}
 actions:
   - {name: onTest, title: 测试连接, permission: write}
+  - {name: onListPaths, title: 获取目录结构, permission: write}

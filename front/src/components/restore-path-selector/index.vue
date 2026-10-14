@@ -1,6 +1,15 @@
 <template>
   <div class="restore-path-selector">
-    <PluginPathSelector :model-value="modelValue" :instance-id="instanceId" :access-id="accessId" :action="action" :modal-title="modalTitle" :placeholder="placeholder" @update:model-value="onTargetPathChange" />
+    <PluginPathSelector
+      :model-value="modelValue"
+      :multiple="false"
+      :instance-id="instanceId"
+      :access-id="accessId"
+      :action="action"
+      :modal-title="modalTitle"
+      :placeholder="placeholder"
+      @update:model-value="onTargetPathChange"
+    />
     <div class="restore-path-selector__preview" aria-live="polite">
       <div class="restore-path-selector__preview-heading">恢复目录预览</div>
       <div v-if="!selectedTargetPath" class="restore-path-selector__empty">请选择恢复目录</div>

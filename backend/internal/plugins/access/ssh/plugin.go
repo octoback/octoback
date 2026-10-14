@@ -43,12 +43,27 @@ type SshAccess struct {
 	client             *ssh.Client
 }
 
-func (s *SshAccess) ExecuteAction(ctx context.Context, action string, _ map[string]any) (any, error) {
+
+func (s *SshAccess) ExecuteAction(ctx context.Context, action string, params map[string]any) (any, error) {
 	if action == "onTest" {
 		if err := s.Test(ctx); err != nil {
 			return nil, err
 		}
 		return map[string]any{"ok": true}, nil
+	}
+	if action == "onListPaths" {
+		remotePath := strings.TrimSpace(fmt.Sprint(params["path"]))
+		if remotePath == "<nil>" || remotePath == "" {
+			remotePath = strings.TrimSpace(fmt.Sprint(params["cursor"]))
+		}
+		if remotePath == "<nil>" || remotePath == "" {
+			remotePath = "/"
+		}
+		result, err := s.ListDirectoriesWithStats(ctx, remotePath)
+		if err != nil {
+			return nil, error_.NewWrapError("插件 access.ssh action onListPaths 执行失败", err)
+		}
+		return result, nil
 	}
 	return nil, plugin.NewActionNotFoundError()
 }

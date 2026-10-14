@@ -87,6 +87,16 @@ func pluginInstanceSnapshotBrowser(s *svc.ServiceContext) func(fiber.Ctx) (any, 
 	}
 }
 
+// pluginInstanceForgetSnapshot godoc
+// @Summary 删除仓库中的指定快照
+// @Tags 插件
+// @Accept json
+// @Produce json
+// @Security bearerAuth
+// @Param id query int64 true "仓库插件实例 Id"
+// @Param snapshotId query string true "Restic 快照 Id"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/plugin/instance/forget-snapshot [post]
 func pluginInstanceForgetSnapshot(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 	return func(c fiber.Ctx) (any, error) {
 		id, err := strconv.ParseInt(c.Query("id"), 10, 64)

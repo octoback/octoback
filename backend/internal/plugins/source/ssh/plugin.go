@@ -3,8 +3,6 @@ package ssh
 import (
 	"context"
 	_ "embed"
-	"fmt"
-	"strings"
 
 	"handfree-work/octo-backup/internal/base/error_"
 	"handfree-work/octo-backup/internal/modules/plugin"
@@ -68,12 +66,5 @@ func (e *SshSource) onListPaths(ctx context.Context, form map[string]any) (any, 
 		return nil, error_.NewWrapError("创建 SSH 授权插件实例失败", err)
 	}
 	client := instance.(*sshaccess.SshAccess)
-	remotePath := strings.TrimSpace(fmt.Sprint(form["path"]))
-	if remotePath == "<nil>" || remotePath == "" {
-		remotePath = strings.TrimSpace(fmt.Sprint(form["cursor"]))
-	}
-	if remotePath == "<nil>" || remotePath == "" {
-		remotePath = "/"
-	}
-	return client.ListDirectoriesWithStats(ctx, remotePath)
+	return client.ExecuteAction(ctx, "onListPaths", form)
 }

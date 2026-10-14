@@ -55,7 +55,10 @@
                 <span class="panel-kicker">SNAPSHOT DETAIL</span>
                 <h1>{{ formatDate(selectedSnapshot.time) }}</h1>
               </div>
-              <a-tag color="green">已保存</a-tag>
+              <a-space>
+                <a-tag color="green">已保存</a-tag>
+                <a-button danger :loading="snapshotDeleting" @click="deleteSelectedSnapshot">删除快照</a-button>
+              </a-space>
             </div>
             <a-divider />
             <div class="detail-grid">
@@ -107,26 +110,37 @@
         </section>
       </div>
     </a-spin>
+    <a-modal v-model:open="restoreVisible" title="创建恢复任务" :confirm-loading="restoreLoading" width="800px" @ok="submitRestore">
+      <a-alert type="warning" show-icon message="如果目标目录已有同名文件，恢复时会用备份中的文件覆盖它" />
+      <a-form class="restore-form mt-2">
+        <a-form-item label="目标 SSH 授权" required>
+          <AccessSelector v-model="restoreForm.targetAccessId" />
+        </a-form-item>
+        <a-form-item label="恢复到主机目录" required>
+          <RestorePathSelector v-model="restoreForm.targetPath" :source-paths="restorePaths" :instance-id="restoreForm.targetAccessId" action="onListPaths" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </fs-page>
 </template>
-<script setup lang="tsx">
+<script setup lang="ts">
 import { computed, h, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { DatabaseOutlined, FileOutlined, FolderOutlined, RightOutlined, TagOutlined } from "@ant-design/icons-vue";
-import { Alert, Form, FormItem, message } from "ant-design-vue";
+import { message, Modal } from "ant-design-vue";
 import {
   checkPluginInstanceRepository,
   getPluginInstanceInfo,
   getPluginInstanceSnapshotBrowser,
   getPluginInstanceSnapshots,
   getPluginInstanceStats,
-  refreshPluginInstanceRepositoryData
+  refreshPluginInstanceRepositoryData,
+  forgetPluginInstanceSnapshot
 } from "/@/views/sys/plugin/plugin-api";
 import { createRestoreTask } from "/@/views/sys/restore-task/api";
 import AccessSelector from "/@/components/access-selector/index.vue";
 import RestorePathSelector from "/@/components/restore-path-selector/index.vue";
 import { compactRestorePaths } from "/@/components/restore-path-selector/preview";
-import { useFormDialog } from "/@/use/use-dialog";
 interface Snapshot {
   id: string;
   time?: string;
@@ -158,11 +172,13 @@ const browserLoading = ref(false);
 const browserEntries = ref<BrowserEntry[]>([]);
 const browserLoaded = ref(false);
 const actionLoading = ref(false);
+const snapshotDeleting = ref(false);
+const restoreVisible = ref(false);
+const restoreLoading = ref(false);
 const selectedPaths = ref<string[]>([]);
 const selectedBackupPaths = ref<string[]>([]);
 const restorePaths = computed(() => compactRestorePaths([...selectedBackupPaths.value, ...selectedPaths.value]));
 const restoreForm = ref({ targetAccessId: 0, targetPath: [] as string[] });
-const { openFormDialog } = useFormDialog();
 const snapshotGroups = computed(() => {
   const groups = new Map<string, Snapshot[]>();
   for (const snapshot of snapshots.value) {
@@ -234,54 +250,54 @@ async function selectSnapshot(snapshot: Snapshot) {
 async function submitRestore() {
   if (!selectedSnapshot.value || !restoreForm.value.targetAccessId || restoreForm.value.targetPath.length !== 1) {
     message.error("请选择恢复路径、目标主机和目标目录");
-    throw new Error("恢复参数不完整");
+    return;
   }
-  await createRestoreTask({
-    repositoryId: Number(route.params.id),
-    snapshotId: selectedSnapshot.value.id,
-    sourceId: selectedSnapshot.value.sourceId,
-    targetAccessId: restoreForm.value.targetAccessId,
-    targetPath: restoreForm.value.targetPath[0],
-    selectedPaths: restorePaths.value
+  restoreLoading.value = true;
+  try {
+    await createRestoreTask({
+      repositoryId: Number(route.params.id),
+      snapshotId: selectedSnapshot.value.id,
+      sourceId: selectedSnapshot.value.sourceId,
+      targetAccessId: restoreForm.value.targetAccessId,
+      targetPath: restoreForm.value.targetPath[0],
+      selectedPaths: restorePaths.value
+    });
+    message.success("恢复任务已创建");
+    restoreVisible.value = false;
+  } catch (error: any) {
+    message.error(error?.message || "创建恢复任务失败");
+  } finally {
+    restoreLoading.value = false;
+  }
+}
+function deleteSelectedSnapshot() {
+  if (!selectedSnapshot.value) {
+    return;
+  }
+  const snapshot = selectedSnapshot.value;
+  Modal.confirm({
+    title: "确认删除快照",
+    content: `删除快照“${formatDate(snapshot.time)}”后将清理其不再使用的数据，操作不可恢复。确定继续吗？`,
+    okText: "删除",
+    okType: "danger",
+    cancelText: "取消",
+    onOk: async () => {
+      snapshotDeleting.value = true;
+      try {
+        await forgetPluginInstanceSnapshot(String(route.params.id), snapshot.id);
+        message.success("快照已删除");
+        await loadSnapshots();
+      } catch (error: any) {
+        message.error(error?.message || "删除快照失败");
+      } finally {
+        snapshotDeleting.value = false;
+      }
+    }
   });
-  message.success("恢复任务已创建");
 }
 function openRestoreDialog() {
   restoreForm.value = { targetAccessId: 0, targetPath: [] };
-  openFormDialog({
-    title: "创建恢复任务",
-    noneForm: true,
-    className: "restore-task-dialog",
-    wrapper: { width: "800px" },
-    body: () => (
-      <>
-        <Alert type="warning" showIcon message="如果目标目录已有同名文件，恢复时会用备份中的文件覆盖它" class="mb-2" />
-        <Form class="restore-form">
-          <FormItem label="目标 SSH 授权" required>
-            <AccessSelector
-              modelValue={restoreForm.value.targetAccessId}
-              onUpdate:modelValue={(value: number | null) => {
-                restoreForm.value.targetAccessId = value || 0;
-              }}
-            />
-          </FormItem>
-          <FormItem label="恢复到主机目录" required>
-            <RestorePathSelector
-              modelValue={restoreForm.value.targetPath}
-              sourcePaths={restorePaths.value}
-              instanceId={selectedSnapshot.value?.sourceId}
-              accessId={restoreForm.value.targetAccessId}
-              action="onListPaths"
-              onUpdate:modelValue={(value: string[]) => {
-                restoreForm.value.targetPath = value;
-              }}
-            />
-          </FormItem>
-        </Form>
-      </>
-    ),
-    onSubmit: submitRestore
-  });
+  restoreVisible.value = true;
 }
 async function loadBrowserNode() {
   if (browserLoaded.value || !selectedSnapshot.value) {
