@@ -1,6 +1,23 @@
-# OctoBackup
 
-一个基于Restic的远程备份管理系统，优雅的web界面，远程系统数据备份、恢复、管理等功能。
+
+# OctoBackup 章鱼备份
+
+<center>
+<img src="./front/public/logo/logo3.png" alt="章鱼备份logo" width="300" />
+</center>
+
+
+
+一个基于Restic的远程备份管理系统，像一只章鱼一样，从多个远程主机备份到多个远程存储仓库。
+
+直观的可视化界面，避免错误命令误操作。
+
+![](./docs/images/show.png)
+
+备份快照详情
+
+![](./docs/images/snapshot.png)
+
 
 ## 核心能力
 

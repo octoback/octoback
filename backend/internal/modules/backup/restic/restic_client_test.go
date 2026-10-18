@@ -17,7 +17,7 @@ func (e *recordingExecutor) Close() error                                       
 func (e *recordingExecutor) Execute(_ context.Context, args, env []string) ([]byte, error) {
 	e.args = args
 	e.env = env
-	return []byte("[]"), nil
+	return []byte(`{"total_size":1}`), nil
 }
 
 func TestAliOSSRepositoryConfigUsesS3URLAndCredentials(t *testing.T) {
@@ -47,6 +47,20 @@ func TestBackupSummaryExtractsSnapshotId(t *testing.T) {
 	result := backupSummary([]byte(`{"message_type":"summary","snapshot_id":"abc123","total_files_processed":2}`))
 	if result["snapshot_id"] != "abc123" {
 		t.Fatalf("snapshot_id = %v, want abc123", result["snapshot_id"])
+	}
+}
+
+func TestSnapshotStatsUsesRestoreSizeMode(t *testing.T) {
+	config := ClientConfig{Environment: LocalResticEnvironment, RepositoryURL: "s3:https://example.test/repo", RepositoryPassword: "password"}
+	client := NewResticClient(nil, config)
+	executor := &recordingExecutor{}
+	client.executor = executor
+	if _, err := client.SnapshotStats(context.Background(), "snapshot-123"); err != nil {
+		t.Fatal(err)
+	}
+	wantArgs := []string{"-r", config.RepositoryURL, "stats", "snapshot-123", "--json", "--mode", "restore-size"}
+	if !reflect.DeepEqual(executor.args, wantArgs) {
+		t.Fatalf("args = %#v, want %#v", executor.args, wantArgs)
 	}
 }
 

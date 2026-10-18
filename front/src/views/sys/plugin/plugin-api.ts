@@ -50,6 +50,8 @@ export const getPluginInstancePage = (data: { offset?: number; limit?: number; p
 export const getPluginInstanceInfo = (id: string | number): Promise<PluginInstance> => request({ url: `/plugin/instance/info?id=${id}`, method: "post", data: {} });
 export const getPluginInstanceSnapshots = (id: string | number) => request({ url: `/plugin/instance/snapshots?id=${id}`, method: "post", data: {} });
 export const getPluginInstanceStats = (id: string | number) => request({ url: `/plugin/instance/stats?id=${id}`, method: "post", data: {} });
+export const getPluginInstanceSnapshotStats = (id: string | number, snapshotId: string) =>
+  request({ url: `/plugin/instance/snapshot-stats?id=${id}&snapshotId=${encodeURIComponent(snapshotId)}`, method: "post", data: {} });
 export const refreshPluginInstanceRepositoryData = (id: string | number) => request({ url: `/plugin/instance/refresh-repository-data?id=${id}`, method: "post", data: {} });
 export const checkPluginInstanceRepository = (id: string | number) => request({ url: `/plugin/instance/check?id=${id}`, method: "post", data: {} });
 export const getPluginInstanceSnapshotBrowser = (id: string | number, snapshotId: string) =>

@@ -7,14 +7,26 @@ import { preferences } from "./preferences";
 import { initStores } from "./stores";
 import "./styles";
 import "./styles/antd/index.css";
-
+import { setupI18n, useI18n } from "../locales";
 import { useTitle } from "@vueuse/core";
-import { setupI18n } from "/@/vben/locales";
+import { useSettingStore } from "../store/modules/settings";
 
-export async function setupVben(app: any) {
-  await setupI18n(app);
+export async function setupVben(app: any, { loadMessages, router }: any) {
+  await setupI18n(app, { loadMessages });
   const store = await initStores(app, { namespace: "fs" });
-
+  const settingStore = useSettingStore();
+  const { t } = useI18n();
+  watchEffect(() => {
+    if (preferences.app.dynamicTitle) {
+      let routeTitle = router.currentRoute.value.meta?.title;
+      const appName = settingStore.inited ? preferences.app.name : "";
+      if (routeTitle && routeTitle.indexOf(".") >= 0) {
+        routeTitle = t(routeTitle);
+      }
+      const pageTitle = (routeTitle ? `${routeTitle} - ` : "") + preferences.app.name;
+      useTitle(pageTitle);
+    }
+  });
   return { store };
 }
 

@@ -9,9 +9,7 @@
           <a-tooltip title="校验仓库数据完整性，不会修改仓库内容">
             <a-button type="primary" :loading="actionLoading" @click="checkRepository">检查</a-button>
           </a-tooltip>
-          <a-tooltip title="重新查询仓库快照和统计数据，并更新本地缓存">
-            <a-button type="primary" :loading="loading" @click="loadSnapshots(true)">刷新</a-button>
-          </a-tooltip>
+          <a-tooltip title="重新查询仓库快照和统计数据，并更新本地缓存"> </a-tooltip>
         </a-space>
       </template>
     </a-page-header>
@@ -57,23 +55,35 @@
               </div>
               <a-space>
                 <a-tag color="green">已保存</a-tag>
+                <a-button type="primary" :loading="snapshotRefreshing" @click="refreshSelectedSnapshot">刷新</a-button>
                 <a-button danger :loading="snapshotDeleting" @click="deleteSelectedSnapshot">删除快照</a-button>
               </a-space>
             </div>
             <a-divider />
-            <div class="detail-grid">
-              <div>
-                <span>Snapshot ID</span><strong>{{ selectedSnapshot.id }}</strong>
+            <div class="summary-section snapshot-info-section">
+              <div class="section-title">快照信息</div>
+              <div class="summary-grid snapshot-info-grid">
+                <div class="summary-item">
+                  <span>Snapshot ID</span>
+                  <strong><fs-copyable :model-value="selectedSnapshot.id" inline :button="{ text: '复制', showOnHover: true }" /></strong>
+                </div>
+                <div class="summary-item">
+                  <span>主机</span><strong>{{ selectedSnapshot.hostname || "未知" }}</strong>
+                </div>
+                <div class="summary-item">
+                  <span>用户</span><strong>{{ selectedSnapshot.username || "未知" }}</strong>
+                </div>
+                <div class="summary-item">
+                  <span>标签</span><strong>{{ formatTags(selectedSnapshot.tags) }}</strong>
+                </div>
               </div>
-              <div>
-                <span>主机</span><strong>{{ selectedSnapshot.hostname || "未知" }}</strong>
+              <div v-if="snapshotStatsEntries.length" class="summary-grid snapshot-stats-grid">
+                <div v-for="entry in snapshotStatsEntries" :key="entry.key" class="summary-item">
+                  <span>{{ entry.label }}</span>
+                  <strong>{{ entry.value }}</strong>
+                </div>
               </div>
-              <div>
-                <span>用户</span><strong>{{ selectedSnapshot.username || "未知" }}</strong>
-              </div>
-              <div>
-                <span>标签</span><strong>{{ formatTags(selectedSnapshot.tags) }}</strong>
-              </div>
+              <a-empty v-else description="暂无快照统计" />
             </div>
             <div class="summary-section">
               <div class="section-title">备份 Summary</div>
@@ -83,7 +93,7 @@
                   <strong>{{ entry.value }}</strong>
                 </div>
               </div>
-              <a-empty v-else :image="null" description="暂无备份 Summary" />
+              <a-empty v-else description="暂无备份 Summary" />
             </div>
             <div class="paths-section">
               <div class="mb-2">
@@ -101,7 +111,7 @@
                   </label>
                 </a-checkbox-group>
               </div>
-              <a-empty v-else :image="null" description="没有备份路径" />
+              <a-empty v-else description="没有备份路径" />
             </div>
             <div class="browser-section">
               <div class="section-title">恢复指定路径</div>
@@ -138,6 +148,7 @@ import {
   getPluginInstanceSnapshotBrowser,
   getPluginInstanceSnapshots,
   getPluginInstanceStats,
+  getPluginInstanceSnapshotStats,
   refreshPluginInstanceRepositoryData,
   forgetPluginInstanceSnapshot
 } from "/@/views/sys/plugin/plugin-api";
@@ -153,6 +164,7 @@ interface Snapshot {
   tags?: string[];
   paths?: string[];
   summary?: Record<string, unknown>;
+  stats?: Record<string, unknown>;
   sourceId?: number;
   repositoryId?: number;
   snapshotId?: string;
@@ -177,6 +189,7 @@ const browserEntries = ref<BrowserEntry[]>([]);
 const browserLoaded = ref(false);
 const actionLoading = ref(false);
 const snapshotDeleting = ref(false);
+const snapshotRefreshing = ref(false);
 const restoreVisible = ref(false);
 const restoreLoading = ref(false);
 const selectedPaths = ref<string[]>([]);
@@ -184,9 +197,28 @@ const selectedBackupPaths = ref<string[]>([]);
 const restorePaths = computed(() => compactRestorePaths([...selectedBackupPaths.value, ...selectedPaths.value]));
 const restoreForm = ref({ targetAccessId: 0, targetPath: [] as string[] });
 const restorePathIsEmpty = ref<boolean | undefined>();
+const snapshotStatsEntries = computed(() => {
+  const stats = selectedSnapshot.value?.stats;
+  if (!stats || typeof stats !== "object" || Array.isArray(stats)) {
+    return [];
+  }
+  const labels: Record<string, string> = {
+    total_size: "逻辑大小",
+    total_file_count: "文件数",
+    total_directory_count: "目录数",
+    total_symlink_count: "符号链接数"
+  };
+  return Object.entries(stats).map(([key, value]) => {
+    let renderedValue = String(value);
+    if (key === "total_size" && typeof value === "number") {
+      renderedValue = formatBytes(value);
+    }
+    return { key, label: labels[key] || key, value: renderedValue };
+  });
+});
 const snapshotSummaryEntries = computed(() => {
   const summary = selectedSnapshot.value?.summary;
-  if (!summary) {
+  if (!summary || typeof summary !== "object" || Array.isArray(summary)) {
     return [];
   }
   const labels: Record<string, string> = {
@@ -204,19 +236,21 @@ const snapshotSummaryEntries = computed(() => {
     data_added: "新增数据",
     data_added_packed: "新增压缩数据"
   };
-  return Object.entries(summary).map(([key, value]) => {
-    let renderedValue = String(value);
-    if ((key === "backup_start" || key === "backup_end") && typeof value === "string") {
-      renderedValue = formatDate(value);
-    }
-    if ((key === "data_added" || key === "data_added_packed" || key === "total_bytes_processed") && typeof value === "number") {
-      renderedValue = formatBytes(value);
-    }
-    if (typeof value === "object") {
-      renderedValue = JSON.stringify(value);
-    }
-    return { key, label: labels[key] || key, value: renderedValue };
-  });
+  return Object.entries(summary)
+    .filter(([key]) => key !== "snapshot_id")
+    .map(([key, value]) => {
+      let renderedValue = String(value);
+      if ((key === "backup_start" || key === "backup_end") && typeof value === "string") {
+        renderedValue = formatDate(value);
+      }
+      if ((key === "data_added" || key === "data_added_packed" || key === "total_bytes_processed") && typeof value === "number") {
+        renderedValue = formatBytes(value);
+      }
+      if (typeof value === "object") {
+        renderedValue = JSON.stringify(value);
+      }
+      return { key, label: labels[key] || key, value: renderedValue };
+    });
 });
 const snapshotGroups = computed(() => {
   const groups = new Map<string, Snapshot[]>();
@@ -229,7 +263,7 @@ const snapshotGroups = computed(() => {
   return Array.from(groups, ([tag, items]) => ({ tag, items }));
 });
 const browserTree = computed(() => {
-  const root = { key: "/", title: "/", icon: h(FolderOutlined), isLeaf: false };
+  const root: any = { key: "/", title: "/", icon: h(FolderOutlined), isLeaf: false };
   if (!browserLoaded.value) {
     return [root];
   }
@@ -311,6 +345,25 @@ async function submitRestore() {
     message.error(error?.message || "创建恢复任务失败");
   } finally {
     restoreLoading.value = false;
+  }
+}
+async function refreshSelectedSnapshot() {
+  if (!selectedSnapshot.value) {
+    return;
+  }
+  snapshotRefreshing.value = true;
+  try {
+    const stats = await getPluginInstanceSnapshotStats(String(route.params.id), selectedSnapshot.value.id);
+    selectedSnapshot.value = { ...selectedSnapshot.value, stats };
+    const index = snapshots.value.findIndex((snapshot) => snapshot.id === selectedSnapshot.value?.id);
+    if (index >= 0) {
+      snapshots.value[index] = selectedSnapshot.value;
+    }
+    message.success("快照统计已刷新");
+  } catch (error: any) {
+    message.error(error?.message || "刷新快照统计失败");
+  } finally {
+    snapshotRefreshing.value = false;
   }
 }
 function deleteSelectedSnapshot() {
@@ -620,6 +673,27 @@ async function checkRepository() {
     color: #263343;
     font-size: 13px;
     overflow-wrap: anywhere;
+  }
+
+  .snapshot-info-grid .summary-item strong {
+    display: block;
+    min-width: 0;
+  }
+
+  .snapshot-info-grid .summary-item :deep(.fs-copyable.inline) {
+    display: inline-flex;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .snapshot-info-grid .summary-item :deep(.fs-copyable .text) {
+    min-width: 0;
+    color: #263343;
+  }
+
+  .snapshot-info-grid .summary-item :deep(.fs-copyable.show-on-hover .copy-button) {
+    display: flex;
+    flex: 0 0 auto;
   }
 
   .paths-heading {

@@ -58,6 +58,27 @@ func (p *ResticClient) Stats(ctx context.Context) (any, error) {
 	return stats, nil
 }
 
+// SnapshotStats 查询指定快照的逻辑文件统计。
+func (p *ResticClient) SnapshotStats(ctx context.Context, snapshotId string) (map[string]any, error) {
+	defer p.executor.Close()
+	if strings.TrimSpace(snapshotId) == "" {
+		return nil, error_.NewTextError("查询 Restic 快照统计失败: 快照 Id 不能为空")
+	}
+	if err := p.prepareEnvironment(ctx); err != nil {
+		return nil, err
+	}
+	args := []string{"-r", p.repositoryURL(), "stats", snapshotId, "--json", "--mode", "restore-size"}
+	output, err := p.executor.Execute(ctx, args, p.repositoryEnvironment())
+	if err != nil {
+		return nil, error_.NewTextError("查询 Restic 快照统计失败: output=%s error=%v", strings.TrimSpace(string(output)), err)
+	}
+	var stats map[string]any
+	if err := yaml.Unmarshal(output, &stats); err != nil {
+		return nil, error_.NewWrapError("解析 Restic 快照统计失败", err)
+	}
+	return stats, nil
+}
+
 // Check 校验 Restic 仓库完整性。
 func (p *ResticClient) Check(ctx context.Context) error {
 	defer p.executor.Close()

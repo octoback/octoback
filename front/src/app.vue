@@ -1,47 +1,33 @@
 <template>
-  <AConfigProvider :locale="locale" :theme="tokenTheme">
-    <fs-form-provider>
-      <router-view v-if="routerEnabled" />
-    </fs-form-provider>
+  <AConfigProvider :locale="antdvLocale" :theme="tokenTheme">
+    <FsFormProvider>
+      <contextHolder />
+      <router-view />
+    </FsFormProvider>
   </AConfigProvider>
 </template>
 
 <script lang="ts" setup>
-import zhCN from "ant-design-vue/es/locale/zh_CN";
-import enUS from "ant-design-vue/es/locale/en_US";
-import { computed, provide, ref } from "vue";
-import "dayjs/locale/zh-cn";
-import "dayjs/locale/en";
-import dayjs from "dayjs";
-import { usePreferences, preferences } from "/@/vben/preferences";
+import { computed, provide, Ref, ref } from "vue";
+import { preferences, usePreferences } from "/@/vben/preferences";
 import { useAntdDesignTokens } from "/@/vben/hooks";
-import { theme } from "ant-design-vue";
+import { Modal, theme } from "ant-design-vue";
 import AConfigProvider from "ant-design-vue/es/config-provider";
+import { antdvLocale } from "./locales/antdv";
+import { setI18nLanguage } from "/@/locales";
+import { mitter } from "./utils/util.mitt";
 defineOptions({
   name: "App"
 });
 
-//刷新页面方法
-const routerEnabled = ref(true);
-const locale = ref(zhCN);
-async function reload() {
-  // routerEnabled.value = false;
-  // await nextTick();
-  // routerEnabled.value = true;
-}
-function localeChanged(value: any) {
-  console.log("locale changed:", value);
-  if (value === "zh-cn") {
-    locale.value = zhCN;
-    dayjs.locale("zh-cn");
-  } else if (value === "en") {
-    locale.value = enUS;
-    dayjs.locale("en");
-  }
-}
-localeChanged("zh-cn");
-provide("fn:router.reload", reload);
-provide("fn:locale.changed", localeChanged);
+const [modal, contextHolder] = Modal.useModal();
+provide("modal", modal);
+mitter.on("getModal", (event: any) => {
+  event.ModalRef = modal;
+});
+
+const locale = preferences.app.locale;
+setI18nLanguage(locale);
 
 const { isDark } = usePreferences();
 const { tokens } = useAntdDesignTokens();
@@ -59,11 +45,4 @@ const tokenTheme = computed(() => {
     token: tokens
   };
 });
-//其他初始化
-// const resourceStore = useResourceStore();
-// resourceStore.init();
-// const pageStore = usePageStore();
-// pageStore.init();
-// const settingStore = useSettingStore();
-// settingStore.init();
 </script>

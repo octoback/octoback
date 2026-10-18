@@ -49,6 +49,7 @@ type BackupResult struct {
 	Status     string         `json:"status"`
 	Output     string         `json:"output,omitempty"`
 	Summary    map[string]any `json:"summary,omitempty"`
+	Stats      map[string]any `json:"stats,omitempty"`
 	SnapshotId string         `json:"snapshotId,omitempty"`
 }
 

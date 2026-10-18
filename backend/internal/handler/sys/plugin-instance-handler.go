@@ -23,6 +23,7 @@ func RegisterPlugin(app *fiber.App, s *svc.ServiceContext) {
 		web_.Route{Path: "/info", Permission: web_.Read, Handler: web_.Handle(pluginInstanceInfo(s))},
 		web_.Route{Path: "/snapshots", Permission: web_.Read, Handler: web_.Handle(pluginInstanceSnapshots(s))},
 		web_.Route{Path: "/stats", Permission: web_.Read, Handler: web_.Handle(pluginInstanceStats(s))},
+		web_.Route{Path: "/snapshot-stats", Permission: web_.Read, Handler: web_.Handle(pluginInstanceSnapshotStats(s))},
 		web_.Route{Path: "/refresh-repository-data", Permission: web_.Write, Handler: web_.Handle(pluginInstanceRefreshRepositoryData(s))},
 		web_.Route{Path: "/check", Permission: web_.Write, Handler: web_.Handle(pluginInstanceCheck(s))},
 		web_.Route{Path: "/snapshot-browser", Permission: web_.Read, Handler: web_.Handle(pluginInstanceSnapshotBrowser(s))},
@@ -33,6 +34,16 @@ func RegisterPlugin(app *fiber.App, s *svc.ServiceContext) {
 		web_.Route{Path: "/action", Permission: web_.Write, Handler: web_.HandleJSON(pluginInstanceAction(s))},
 		web_.Route{Path: "/delete", Permission: web_.Admin, Handler: web_.Handle(pluginInstanceDelete(s))},
 	)
+}
+func pluginInstanceSnapshotStats(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
+	return func(c fiber.Ctx) (any, error) {
+		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
+		if err != nil {
+			return nil, error_.NewCodeTextError(code_.ParamError, "插件 Id 无效")
+		}
+		snapshotId := c.Query("snapshotId")
+		return logic.NewPluginInstanceService(c.Context(), s).SnapshotStats(id, snapshotId)
+	}
 }
 func pluginInstanceRefreshRepositoryData(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 	return func(c fiber.Ctx) (any, error) {

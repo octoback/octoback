@@ -1,18 +1,24 @@
 import type { App } from "vue";
 import type { Locale } from "vue-i18n";
-
+import { setAntdvLocale } from "./antdv";
 import type { ImportLocaleFn, LoadMessageFn, LocaleSetupOptions, SupportedLanguagesType } from "./typing";
 
 import { unref } from "vue";
 import { createI18n } from "vue-i18n";
+import en_US from "./langs/en-US/index";
+import zh_CN from "./langs/zh-CN/index";
 
 import { useSimpleLocale } from "/@/vben/composables";
 
 const i18n = createI18n({
   globalInjection: true,
   legacy: false,
-  locale: "",
-  messages: {}
+  fallbackLocale: "en-US",
+  locale: "en-US",
+  messages: {
+    "zh-CN": zh_CN,
+    "en-US": en_US
+  }
 });
 
 const modules = import.meta.glob("./langs/**/*.json");
@@ -83,13 +89,15 @@ function loadLocalesMapFromDir(regexp: RegExp, modules: Record<string, () => Pro
  * @param locale
  */
 function setI18nLanguage(locale: Locale) {
+  setAntdvLocale(locale);
+  //@ts-ignore
   i18n.global.locale.value = locale;
 
   document?.querySelector("html")?.setAttribute("lang", locale);
 }
 
 async function setupI18n(app: App, options: LocaleSetupOptions = {}) {
-  const { defaultLocale = "zh-CN" } = options;
+  const { defaultLocale = "en-US" } = options;
   // app可以自行扩展一些第三方库和组件库的国际化
   loadMessages = options.loadMessages || (async () => ({}));
   app.use(i18n);
@@ -116,6 +124,7 @@ async function loadLocaleMessages(lang: SupportedLanguagesType) {
   const message = await localesMap[lang]?.();
 
   if (message?.default) {
+    //@ts-ignore
     i18n.global.setLocaleMessage(lang, message.default);
   }
 
@@ -125,4 +134,11 @@ async function loadLocaleMessages(lang: SupportedLanguagesType) {
   return setI18nLanguage(lang);
 }
 
-export { i18n, loadLocaleMessages, loadLocalesMap, loadLocalesMapFromDir, setupI18n };
+export function useI18n() {
+  return {
+    t: i18n.global.t,
+    locale: i18n.global.locale
+  };
+}
+export { i18n, loadLocaleMessages, loadLocalesMap, loadLocalesMapFromDir, setupI18n, setI18nLanguage };
+export default i18n;

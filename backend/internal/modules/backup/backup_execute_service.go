@@ -56,6 +56,10 @@ func serializeBackupSummary(summary map[string]any) (string, error) {
 	return string(data), nil
 }
 
+func serializeBackupStats(stats map[string]any) (string, error) {
+	return serializeBackupSummary(stats)
+}
+
 func appendBackupLog(db *gorm.DB, logId int64, level string, message string) {
 	if db == nil || logId <= 0 || strings.TrimSpace(message) == "" {
 		return
@@ -115,6 +119,19 @@ func (s *BackupExecuteService) Execute(id int64, logId int64) (*BackupExecuteRes
 		}
 		if err := s.svcCtx.Db.Model(&models.BackupLog{}).Where("id = ?", logId).Update("summary", data).Error; err != nil {
 			appendLog("WARN", "保存 Restic summary 失败："+err.Error())
+		}
+	}
+	saveStats := func(stats map[string]any) {
+		data, err := serializeBackupStats(stats)
+		if err != nil {
+			appendLog("WARN", "序列化 Restic stats 失败："+err.Error())
+			return
+		}
+		if data == "" {
+			return
+		}
+		if err := s.svcCtx.Db.Model(&models.BackupLog{}).Where("id = ?", logId).Update("stats", data).Error; err != nil {
+			appendLog("WARN", "保存 Restic stats 失败："+err.Error())
 		}
 	}
 	updateLog("running", 5, "读取备份计划", "", "")
@@ -180,6 +197,7 @@ func (s *BackupExecuteService) Execute(id int64, logId int64) (*BackupExecuteRes
 		setStatus("failed", message)
 		return nil, error_.NewTextError("%s", message)
 	}
+	saveStats(result.Stats)
 	_ = s.svcCtx.Db.Model(&models.BackupLog{}).Where("id = ?", logId).Updates(map[string]any{"plan_id": plan.Id, "source_id": plan.SourceId, "repository_id": plan.RepositoryId, "snapshot_id": result.SnapshotId}).Error
 	setStatus("success", "")
 	updateLog("success", 100, "完成", "", "")
@@ -242,6 +260,14 @@ func (s *BackupExecuteService) doBackup(plan *models.BackupPlan, source plugin.P
 	result, err := client.Backup(s.ctx, backupRequest)
 	if err != nil {
 		return result, error_.NewWrapError("执行备份任务失败", err)
+	}
+	appendLog("INFO", "开始查询新快照统计")
+	stats, statsErr := restic.NewResticClient(s.svcCtx, clientConfig).SnapshotStats(s.ctx, result.SnapshotId)
+	if statsErr != nil {
+		appendLog("WARN", "查询快照统计失败："+statsErr.Error())
+	} else {
+		result.Stats = stats
+		appendLog("INFO", "快照统计查询完成")
 	}
 	if _, refreshErr := instance.RefreshRepositoryData(plan.RepositoryId, result.Summary); refreshErr != nil {
 		appendLog("WARN", "备份完成后刷新仓库详情缓存失败："+refreshErr.Error())

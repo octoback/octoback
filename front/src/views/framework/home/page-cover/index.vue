@@ -43,7 +43,7 @@
 
     <a-card title="数据说明" class="notice-card"
       ><template #extra><fs-icon icon="lucide:info" /></template>
-      <p>仓库数量来自当前实例的存储仓库配置。主机、备份任务和恢复快照功能将在对应后端模块接入后提供统计。</p></a-card
+      <p>数据来自当前实例的存储仓库、备份来源、备份计划和 Restic 快照记录。</p></a-card
     >
   </section>
 </template>
@@ -51,16 +51,20 @@
 <script lang="ts" setup>
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { getPluginInstancePage } from "/@/views/sys/plugin/plugin-api";
+import { getPluginInstancePage, getPluginInstanceSnapshots } from "/@/views/sys/plugin/plugin-api";
+import { getBackupPlanPage } from "/@/views/sys/plan/api";
 
 const router = useRouter();
 const loading = ref(true);
 const repositoryCount = ref(0);
+const sourceCount = ref(0);
+const backupPlanCount = ref(0);
+const snapshotCount = ref(0);
 const stats = computed(() => [
   { label: "存储仓库", value: repositoryCount.value, note: repositoryCount.value ? "已配置" : "尚未配置", icon: "lucide:database", loading: true },
-  { label: "备份主机", value: "--", note: "功能尚未接入", icon: "lucide:server", loading: false },
-  { label: "备份任务", value: "--", note: "功能尚未接入", icon: "lucide:calendar-check", loading: false },
-  { label: "恢复快照", value: "--", note: "功能尚未接入", icon: "lucide:history", loading: false }
+  { label: "备份主机", value: sourceCount.value, note: sourceCount.value ? "已接入" : "尚未配置", icon: "lucide:server", loading: true },
+  { label: "备份任务", value: backupPlanCount.value, note: backupPlanCount.value ? "已配置" : "尚未配置", icon: "lucide:calendar-check", loading: true },
+  { label: "恢复快照", value: snapshotCount.value, note: snapshotCount.value ? "可恢复" : "尚无快照", icon: "lucide:history", loading: true }
 ]);
 const quickLinks = [
   { title: "存储仓库", description: "管理 Local、SFTP、S3 和 MinIO 仓库", icon: "lucide:database", path: "/sys/repository" },
@@ -71,14 +75,28 @@ function go(path: string) {
 }
 
 onMounted(async () => {
-  try {
-    const result = await getPluginInstancePage({ pluginType: "repository", limit: 1 });
-    repositoryCount.value = Number(result?.total || 0);
-  } catch {
-    repositoryCount.value = 0;
-  } finally {
-    loading.value = false;
+  const [repositories, sources, plans] = await Promise.allSettled([
+    getPluginInstancePage({ pluginType: "repository", limit: 1000 }),
+    getPluginInstancePage({ pluginType: "source", limit: 1 }),
+    getBackupPlanPage({ limit: 1 })
+  ]);
+  if (repositories.status === "fulfilled") {
+    repositoryCount.value = Number(repositories.value?.total || 0);
+    const snapshotResults = await Promise.allSettled((repositories.value?.records || []).map((record: { id: string | number }) => getPluginInstanceSnapshots(record.id)));
+    snapshotCount.value = snapshotResults.reduce((total, result) => {
+      if (result.status !== "fulfilled" || !Array.isArray(result.value)) {
+        return total;
+      }
+      return total + result.value.length;
+    }, 0);
   }
+  if (sources.status === "fulfilled") {
+    sourceCount.value = Number(sources.value?.total || 0);
+  }
+  if (plans.status === "fulfilled") {
+    backupPlanCount.value = Number(plans.value?.total || 0);
+  }
+  loading.value = false;
 });
 </script>
 

@@ -186,6 +186,32 @@ func (s *PluginInstanceService) RepositoryStats(id int64) (any, error) {
 	return data["stats"], nil
 }
 
+// SnapshotStats 查询指定快照的统计状态。
+func (s *PluginInstanceService) SnapshotStats(id int64, snapshotId string) (map[string]any, error) {
+	if strings.TrimSpace(snapshotId) == "" {
+		return nil, error_.NewTextError("查询快照统计失败: 快照 Id 不能为空")
+	}
+	client, err := s.repositoryClient(id)
+	if err != nil {
+		return nil, err
+	}
+	stats, err := client.SnapshotStats(s.ctx, snapshotId)
+	if err != nil {
+		return nil, error_.NewWrapError("查询快照统计失败", err)
+	}
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		return nil, error_.NewWrapError("序列化快照统计失败", err)
+	}
+	result := s.svcCtx.Db.Model(&models.BackupLog{}).
+		Where("repository_id = ? AND snapshot_id = ?", id, snapshotId).
+		Update("stats", string(raw))
+	if result.Error != nil {
+		return nil, error_.NewWrapError("保存快照统计失败", result.Error)
+	}
+	return stats, nil
+}
+
 // RefreshRepositoryData 查询 Restic 仓库并更新详情缓存。
 func (s *PluginInstanceService) RefreshRepositoryData(id int64, summary map[string]any) (map[string]any, error) {
 	client, err := s.repositoryClient(id)
@@ -255,6 +281,10 @@ func (s *PluginInstanceService) attachSnapshotAssociations(repositoryId int64, v
 			var summary map[string]any
 			if strings.TrimSpace(row.Summary) != "" && json.Unmarshal([]byte(row.Summary), &summary) == nil {
 				entry["summary"] = summary
+			}
+			var stats map[string]any
+			if strings.TrimSpace(row.Stats) != "" && json.Unmarshal([]byte(row.Stats), &stats) == nil {
+				entry["stats"] = stats
 			}
 		} else {
 			entry["associationMissing"] = true
