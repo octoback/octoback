@@ -74,12 +74,16 @@
               <div>
                 <span>标签</span><strong>{{ formatTags(selectedSnapshot.tags) }}</strong>
               </div>
-              <div>
-                <span>文件数量</span><strong>{{ selectedSnapshot.summary?.total_files ?? "-" }}</strong>
+            </div>
+            <div class="summary-section">
+              <div class="section-title">备份 Summary</div>
+              <div v-if="snapshotSummaryEntries.length" class="summary-grid">
+                <div v-for="entry in snapshotSummaryEntries" :key="entry.key" class="summary-item">
+                  <span>{{ entry.label }}</span>
+                  <strong>{{ entry.value }}</strong>
+                </div>
               </div>
-              <div>
-                <span>处理字节</span><strong>{{ formatBytes(selectedSnapshot.summary?.total_bytes_processed) }}</strong>
-              </div>
+              <a-empty v-else :image="null" description="暂无备份 Summary" />
             </div>
             <div class="paths-section">
               <div class="mb-2">
@@ -148,7 +152,7 @@ interface Snapshot {
   username?: string;
   tags?: string[];
   paths?: string[];
-  summary?: { total_files?: number; total_bytes_processed?: number };
+  summary?: Record<string, unknown>;
   sourceId?: number;
   repositoryId?: number;
   snapshotId?: string;
@@ -179,6 +183,40 @@ const selectedPaths = ref<string[]>([]);
 const selectedBackupPaths = ref<string[]>([]);
 const restorePaths = computed(() => compactRestorePaths([...selectedBackupPaths.value, ...selectedPaths.value]));
 const restoreForm = ref({ targetAccessId: 0, targetPath: [] as string[] });
+const snapshotSummaryEntries = computed(() => {
+  const summary = selectedSnapshot.value?.summary;
+  if (!summary) {
+    return [];
+  }
+  const labels: Record<string, string> = {
+    backup_start: "开始时间",
+    backup_end: "结束时间",
+    total_files_processed: "处理文件",
+    total_bytes_processed: "处理字节",
+    total_duration: "耗时（秒）",
+    files_new: "新增文件",
+    files_changed: "变更文件",
+    files_unmodified: "未变更文件",
+    dirs_new: "新增目录",
+    dirs_changed: "变更目录",
+    dirs_unmodified: "未变更目录",
+    data_added: "新增数据",
+    data_added_packed: "新增压缩数据"
+  };
+  return Object.entries(summary).map(([key, value]) => {
+    let renderedValue = String(value);
+    if ((key === "backup_start" || key === "backup_end") && typeof value === "string") {
+      renderedValue = formatDate(value);
+    }
+    if ((key === "data_added" || key === "data_added_packed" || key === "total_bytes_processed") && typeof value === "number") {
+      renderedValue = formatBytes(value);
+    }
+    if (typeof value === "object") {
+      renderedValue = JSON.stringify(value);
+    }
+    return { key, label: labels[key] || key, value: renderedValue };
+  });
+});
 const snapshotGroups = computed(() => {
   const groups = new Map<string, Snapshot[]>();
   for (const snapshot of snapshots.value) {
@@ -393,13 +431,13 @@ async function checkRepository() {
     min-height: 0;
     overflow-y: auto;
     border-right: 1px solid #e5e7eb;
-    padding: 24px 0;
+    padding: 12px 0;
   }
 
   .snapshot-detail-panel {
     min-height: 0;
     overflow-y: auto;
-    padding: 32px 40px;
+    padding: 18px 24px;
   }
 
   .panel-heading,
@@ -407,7 +445,7 @@ async function checkRepository() {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 24px;
+    padding: 0 16px;
   }
 
   .detail-heading {
@@ -427,26 +465,26 @@ async function checkRepository() {
   }
 
   h1 {
-    font-size: 26px;
+    font-size: 22px;
   }
 
   h2 {
-    font-size: 18px;
+    font-size: 16px;
   }
 
   .snapshot-list {
-    margin-top: 18px;
+    margin-top: 10px;
   }
 
   .snapshot-group + .snapshot-group {
-    margin-top: 20px;
+    margin-top: 12px;
   }
 
   .snapshot-group-title {
     display: flex;
     align-items: center;
-    gap: 7px;
-    padding: 8px 24px;
+    gap: 6px;
+    padding: 6px 16px;
     color: #64748b;
     font-size: 12px;
     font-weight: 600;
@@ -461,8 +499,8 @@ async function checkRepository() {
     display: flex;
     align-items: center;
     width: 100%;
-    gap: 12px;
-    padding: 15px 24px;
+    gap: 8px;
+    padding: 10px 16px;
     border: 0;
     border-left: 3px solid transparent;
     background: transparent;
@@ -524,12 +562,12 @@ async function checkRepository() {
   .detail-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
+    gap: 14px 18px;
   }
 
   .detail-grid div {
     display: grid;
-    gap: 6px;
+    gap: 4px;
   }
 
   .detail-grid span {
@@ -539,13 +577,40 @@ async function checkRepository() {
 
   .detail-grid strong {
     color: #263343;
-    font-size: 15px;
+    font-size: 14px;
     word-break: break-word;
   }
 
   .paths-section,
-  .browser-section {
-    margin-top: 36px;
+  .browser-section,
+  .summary-section {
+    margin-top: 18px;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-top: 1px solid #e5e7eb;
+  }
+
+  .summary-item {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    min-width: 0;
+    padding: 8px 10px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .summary-item span {
+    color: #8b95a5;
+    font-size: 12px;
+  }
+
+  .summary-item strong {
+    color: #263343;
+    font-size: 13px;
+    overflow-wrap: anywhere;
   }
 
   .paths-heading {
@@ -556,7 +621,7 @@ async function checkRepository() {
   }
 
   .backup-path-list {
-    padding: 8px 12px;
+    padding: 6px 10px;
     border: 1px solid #e5e7eb;
     border-radius: 6px;
   }
@@ -564,7 +629,7 @@ async function checkRepository() {
   .backup-path-list :deep(.ant-checkbox-group) {
     display: grid;
     width: 100%;
-    gap: 8px;
+    gap: 4px;
   }
 
   .backup-path-item {
@@ -584,7 +649,7 @@ async function checkRepository() {
   }
 
   .browser-section {
-    padding: 16px;
+    padding: 12px;
     border: 1px solid #e5e7eb;
     border-radius: 6px;
 
@@ -637,11 +702,15 @@ async function checkRepository() {
 
     .snapshot-detail-panel {
       min-height: 0;
-      padding: 24px;
+      padding: 16px;
     }
 
     .detail-grid {
       grid-template-columns: repeat(2, 1fr);
+    }
+
+    .summary-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 }

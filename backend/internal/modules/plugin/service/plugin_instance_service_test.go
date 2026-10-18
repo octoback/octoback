@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -12,6 +13,43 @@ import (
 	"handfree-work/octo-backup/internal/modules/plugin"
 	"handfree-work/octo-backup/internal/svc"
 )
+
+func TestAttachSnapshotAssociationsIncludesBackupSummary(t *testing.T) {
+	database, err := db_.OpenSQLite(filepath.Join(t.TempDir(), "snapshot-summary.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := database.AutoMigrate(&models.BackupLog{}); err != nil {
+		t.Fatal(err)
+	}
+	repositoryId := int64(7)
+	snapshotId := "snapshot-summary"
+	if err := database.Create(&models.BackupLog{PlanId: 3, RepositoryId: &repositoryId, SnapshotId: &snapshotId, Summary: `{"snapshot_id":"snapshot-summary","total_files_processed":12,"total_bytes_processed":4096}`}).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := NewPluginInstanceService(context.Background(), &svc.ServiceContext{Db: database})
+	attached := service.attachSnapshotAssociations(repositoryId, []any{map[string]any{"id": snapshotId}}).([]any)
+	entry := attached[0].(map[string]any)
+	if entry["summary"] == nil {
+		t.Fatalf("summary not attached: %#v", entry)
+	}
+	encoded, err := json.Marshal(entry["summary"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var summary map[string]any
+	if err := json.Unmarshal(encoded, &summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary["snapshot_id"] != snapshotId || summary["total_files_processed"] != float64(12) {
+		t.Fatalf("summary = %#v", summary)
+	}
+}
 
 type configCaptureExecutor struct {
 	config map[string]any

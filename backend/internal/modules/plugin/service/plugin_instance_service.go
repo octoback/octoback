@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -251,6 +252,10 @@ func (s *PluginInstanceService) attachSnapshotAssociations(repositoryId int64, v
 			entry["planId"] = row.PlanId
 			entry["sourceId"] = row.SourceId
 			entry["associationMissing"] = false
+			var summary map[string]any
+			if strings.TrimSpace(row.Summary) != "" && json.Unmarshal([]byte(row.Summary), &summary) == nil {
+				entry["summary"] = summary
+			}
 		} else {
 			entry["associationMissing"] = true
 		}
