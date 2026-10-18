@@ -140,6 +140,7 @@ func repositorySftpCommand(config *ClientConfig) string {
 
 // Execute 在远程主机执行 Restic 命令，并通过 shell 环境赋值传入变量。
 func (e RemoteResticExecutor) Execute(ctx context.Context, args []string, environment []string) ([]byte, error) {
+	e.log("INFO", "执行远程 Restic 完整命令："+formatResticCommand(args))
 	if containsResticAction(args, "backup") {
 		return e.executeBackupDetached(ctx, args, environment)
 	}

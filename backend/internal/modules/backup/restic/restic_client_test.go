@@ -86,3 +86,25 @@ func TestForgetSnapshotRejectsEmptyId(t *testing.T) {
 		t.Fatal("ForgetSnapshot() error = nil, want validation error")
 	}
 }
+
+func TestRestoreIncludesRepositoryLocation(t *testing.T) {
+	config := ClientConfig{Environment: LocalResticEnvironment, RepositoryURL: "s3:https://example.test/repo", RepositoryPassword: "password"}
+	client := NewResticClient(nil, config)
+	executor := &recordingExecutor{}
+	client.executor = executor
+	if _, err := client.Restore(context.Background(), RestoreRequest{SnapshotId: "snapshot-123", TargetPath: "/restore", IncludePaths: []string{"/etc"}}); err != nil {
+		t.Fatal(err)
+	}
+	wantArgs := []string{"-r", config.RepositoryURL, "restore", "snapshot-123", "--target", "/restore", "--include", "/etc"}
+	if !reflect.DeepEqual(executor.args, wantArgs) {
+		t.Fatalf("args = %#v, want %#v", executor.args, wantArgs)
+	}
+}
+
+func TestFormatResticCommandQuotesArguments(t *testing.T) {
+	command := formatResticCommand([]string{"-r", "sftp:user@example:/backup path", "restore", "snapshot-1", "--target", "/restore path"})
+	want := "restic '-r' 'sftp:user@example:/backup path' 'restore' 'snapshot-1' '--target' '/restore path'"
+	if command != want {
+		t.Fatalf("command = %q, want %q", command, want)
+	}
+}

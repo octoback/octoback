@@ -130,6 +130,13 @@ func (s *BackupExecuteService) Execute(id int64, logId int64) (*BackupExecuteRes
 		return nil, error_.NewTextError("备份计划不存在")
 	}
 	appendLog("INFO", fmt.Sprintf("备份计划读取完成：%s", plan.Name))
+	var sourceInstance models.PluginInstance
+	var repositoryInstance models.PluginInstance
+	if result := s.svcCtx.Db.Select("name").First(&sourceInstance, plan.SourceId); result.Error == nil {
+		if repositoryResult := s.svcCtx.Db.Select("name").First(&repositoryInstance, plan.RepositoryId); repositoryResult.Error == nil {
+			appendLog("INFO", fmt.Sprintf("备份来源：%s；存储仓库：%s", sourceInstance.Name, repositoryInstance.Name))
+		}
+	}
 	if !plan.Enabled {
 		updateLog("failed", 100, "校验备份计划", "", "已禁用的备份计划不能执行")
 		return nil, error_.NewTextError("已禁用的备份计划不能执行")

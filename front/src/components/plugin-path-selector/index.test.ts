@@ -1,7 +1,41 @@
 import { describe, expect, it } from "vitest";
-import { formatPathInput, getDirectoryRequestPath, normalizePathNodes, parsePathInput, updatePathNodeChildren, updatePathNodeCounts } from "/src/components/plugin-path-selector/helpers";
+import {
+  findPathNode,
+  formatPathInput,
+  getConfirmedPathSelection,
+  getDirectoryRequestPath,
+  isEmptyPathNode,
+  normalizePathNodes,
+  parsePathInput,
+  updatePathNodeChildren,
+  updatePathNodeCounts
+} from "/src/components/plugin-path-selector/helpers";
 
 describe("plugin path selector helpers", () => {
+  it("confirms only the selected tree node in single-select mode", () => {
+    expect(getConfirmedPathSelection(false, ["/data/restore/test", "/ignored"], ["/checked"])).toEqual(["/data/restore/test"]);
+  });
+
+  it("confirms checked tree nodes in multiple-select mode", () => {
+    expect(getConfirmedPathSelection(true, ["/selected"], { checked: ["/data", "/backup"], halfChecked: [] })).toEqual(["/data", "/backup"]);
+  });
+
+  it("finds a selected node and recognizes an empty directory", () => {
+    const nodes = normalizePathNodes({
+      paths: [
+        {
+          key: "/data",
+          children: [
+            { key: "/data/empty", fileCount: 0, directoryCount: 0 },
+            { key: "/data/full", fileCount: 1, directoryCount: 0 }
+          ]
+        }
+      ]
+    });
+    expect(isEmptyPathNode(findPathNode(nodes, "/data/empty"))).toBe(true);
+    expect(isEmptyPathNode(findPathNode(nodes, "/data/full"))).toBe(false);
+  });
+
   it("parses pasted paths into a unique array", () => {
     expect(parsePathInput("/etc\n /var/www\n/etc\n")).toEqual(["/etc", "/var/www"]);
   });

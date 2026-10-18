@@ -9,6 +9,7 @@
       :modal-title="modalTitle"
       :placeholder="placeholder"
       @update:model-value="onTargetPathChange"
+      @path-status="onPathStatus"
     />
     <div class="restore-path-selector__preview" aria-live="polite">
       <div class="restore-path-selector__preview-heading">恢复目录预览</div>
@@ -50,13 +51,20 @@ const props = withDefaults(
     placeholder: "例如 /var/lib/app"
   }
 );
-const emit = defineEmits<{ (event: "update:modelValue", value: string[]): void }>();
+const emit = defineEmits<{
+  (event: "update:modelValue", value: string[]): void;
+  (event: "path-status", value: boolean | undefined): void;
+}>();
 const selectedTargetPath = computed(() => props.modelValue[0] || "");
 const previewPaths = computed(() => buildRestorePathPreview(selectedTargetPath.value, props.sourcePaths));
 
 function onTargetPathChange(paths: string[]) {
   const selectedPath = paths[paths.length - 1];
   emit("update:modelValue", selectedPath ? [normalizeRestorePath(selectedPath)] : []);
+}
+
+function onPathStatus(isEmpty: boolean | undefined) {
+  emit("path-status", isEmpty);
 }
 </script>
 

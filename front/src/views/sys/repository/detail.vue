@@ -121,7 +121,7 @@
           <AccessSelector v-model="restoreForm.targetAccessId" />
         </a-form-item>
         <a-form-item label="恢复到主机目录" required>
-          <RestorePathSelector v-model="restoreForm.targetPath" :source-paths="restorePaths" :instance-id="restoreForm.targetAccessId" action="onListPaths" />
+          <RestorePathSelector v-model="restoreForm.targetPath" :source-paths="restorePaths" :instance-id="restoreForm.targetAccessId" action="onListPaths" @path-status="onRestorePathStatus" />
         </a-form-item>
       </a-form>
     </a-modal>
@@ -183,6 +183,7 @@ const selectedPaths = ref<string[]>([]);
 const selectedBackupPaths = ref<string[]>([]);
 const restorePaths = computed(() => compactRestorePaths([...selectedBackupPaths.value, ...selectedPaths.value]));
 const restoreForm = ref({ targetAccessId: 0, targetPath: [] as string[] });
+const restorePathIsEmpty = ref<boolean | undefined>();
 const snapshotSummaryEntries = computed(() => {
   const summary = selectedSnapshot.value?.summary;
   if (!summary) {
@@ -290,6 +291,10 @@ async function submitRestore() {
     message.error("请选择恢复路径、目标主机和目标目录");
     return;
   }
+  if (restorePathIsEmpty.value === false) {
+    message.error("请选择一个空目录");
+    return;
+  }
   restoreLoading.value = true;
   try {
     await createRestoreTask({
@@ -335,7 +340,11 @@ function deleteSelectedSnapshot() {
 }
 function openRestoreDialog() {
   restoreForm.value = { targetAccessId: 0, targetPath: [] };
+  restorePathIsEmpty.value = undefined;
   restoreVisible.value = true;
+}
+function onRestorePathStatus(isEmpty: boolean | undefined) {
+  restorePathIsEmpty.value = isEmpty;
 }
 async function loadBrowserNode() {
   if (browserLoaded.value || !selectedSnapshot.value) {

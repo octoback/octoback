@@ -2,6 +2,8 @@ package restic
 
 import (
 	"context"
+	"go.uber.org/zap"
+	"handfree-work/octo-backup/internal/base/log_"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -50,6 +52,7 @@ func localResticBinaryPath(version string) (string, error) {
 
 // Execute 执行本机 Restic 命令。
 func (e LocalResticExecutor) Execute(ctx context.Context, args []string, environment []string) ([]byte, error) {
+	log_.Logger.Info("执行本地 Restic 完整命令", zap.String("command", formatResticCommand(args)))
 	command := exec.CommandContext(ctx, e.BinaryPath, args...)
 	command.Env = append(os.Environ(), environment...)
 	return command.CombinedOutput()

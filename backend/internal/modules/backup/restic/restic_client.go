@@ -196,13 +196,17 @@ func (p *ResticClient) Restore(ctx context.Context, request RestoreRequest) (str
 		return "", err
 	}
 	executor := p.executor
-	args := []string{"restore", request.SnapshotId, "--target", request.TargetPath}
+	args := []string{"-r", p.repositoryURL(), "restore", request.SnapshotId, "--target", request.TargetPath}
+	if p.sftpCommand() != "" {
+		args = append([]string{"-o", "sftp.command=" + p.sftpCommand()}, args...)
+	}
 	for _, includePath := range request.IncludePaths {
 		if strings.TrimSpace(includePath) != "" {
 			args = append(args, "--include", includePath)
 		}
 	}
 	log_.Logger.Info("执行 Restic 快照还原", zap.String("snapshotId", request.SnapshotId), zap.String("targetPath", request.TargetPath))
+	p.log("INFO", "Restic 完整命令："+formatResticCommand(args))
 	p.log("INFO", "Restic 执行环境准备完成，开始执行 restore 命令")
 	output, err := executor.Execute(ctx, args, p.repositoryEnvironment())
 	p.logRestoreOutput(output)
@@ -282,6 +286,7 @@ func (p *ResticClient) Backup(ctx context.Context, request BackupRequest) (*Back
 	}
 	args = append(args, request.SourcePaths...)
 	log_.Logger.Info("执行 Restic 文件备份", zap.Int("sourcePathCount", len(request.SourcePaths)))
+	p.log("INFO", "Restic 完整命令："+formatResticCommand(args))
 	environment := append([]string{"RESTIC_REPOSITORY=" + p.repositoryURL()}, p.repositoryEnvironment()...)
 	output, err := executor.Execute(ctx, args, environment)
 	if err != nil {
@@ -299,6 +304,15 @@ func (p *ResticClient) Backup(ctx context.Context, request BackupRequest) (*Back
 	}
 	p.log("INFO", "Restic 备份成功，快照 Id："+snapshotId)
 	return &BackupResult{Status: "success", Output: strings.TrimSpace(string(output)), Summary: summary, SnapshotId: snapshotId}, nil
+}
+
+func formatResticCommand(args []string) string {
+	parts := make([]string, 0, len(args)+1)
+	parts = append(parts, "restic")
+	for _, arg := range args {
+		parts = append(parts, shellQuote(arg))
+	}
+	return strings.Join(parts, " ")
 }
 
 func (p *ResticClient) log(level string, message string) {

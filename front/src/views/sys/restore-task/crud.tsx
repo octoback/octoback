@@ -30,6 +30,14 @@ export default function (): CreateCrudOptionsRet<RestoreTask> {
       content: h("div", { class: "restore-task-log-terminal" }, renderLogContent(result.content || "暂无恢复执行日志"))
     });
   };
+  const statusDict = dict({
+    data: [
+      { value: "queued", label: "排队中", color: "default" },
+      { value: "running", label: "执行中", color: "processing" },
+      { value: "success", label: "成功", color: "success" },
+      { value: "failed", label: "失败", color: "error" }
+    ]
+  });
   return {
     crudOptions: {
       request: { pageRequest: ({ query, page }: any) => getRestoreTaskPage({ offset: page.offset, limit: page.limit, status: query?.status }), delRequest: ({ row }: DelReq<RestoreTask>) => deleteRestoreTask(row.id) },
@@ -47,24 +55,32 @@ export default function (): CreateCrudOptionsRet<RestoreTask> {
         repositoryName: { title: "存储仓库", type: "text", column: { width: 150 } },
         targetAccessName: { title: "目标主机", type: "text", column: { width: 150 } },
         targetPath: { title: "目标目录", type: "text" },
+        progress: { title: "进度", type: "number", column: { width: 130, component: { name: "a-progress", vModel: "percent", size: "small" } } },
+        stage: { title: "阶段", type: "text", column: { width: 120 } },
         status: {
           title: "状态",
           type: "dict-select",
           search: { show: true },
-          dict: dict({
-            data: [
-              { value: "queued", label: "排队中", color: "default" },
-              { value: "running", label: "执行中", color: "processing" },
-              { value: "success", label: "成功", color: "success" },
-              { value: "failed", label: "失败", color: "error" }
-            ]
-          })
+          dict: statusDict,
+          column: {
+            width: 120,
+            cellRender: ({ value, row }: any) => {
+              return (
+                <div class="flex items-center">
+                  <fs-values-format modelValue={value} dict={statusDict}></fs-values-format>
+                  {value === "failed" && (
+                    <a-tooltip class="ml-2" title={row.error}>
+                      <fs-icon icon="bx:error-circle" size={16}></fs-icon>
+                    </a-tooltip>
+                  )}
+                </div>
+              );
+            }
+          }
         },
-        progress: { title: "进度", type: "number", column: { width: 130, component: { name: "a-progress", vModel: "percent", size: "small" } } },
-        stage: { title: "阶段", type: "text", column: { width: 120 } },
-        startedAt: { title: "创建时间", type: "datetime", column: { width: 155 } },
-        finishedAt: { title: "结束时间", type: "datetime", column: { width: 155 } },
-        error: { title: "错误信息", type: "text", column: { width: 220 } }
+        error: { title: "错误信息", type: "text", column: { width: 220, show: false } },
+        startedAt: { title: "开始时间", type: "datetime", column: { width: 155 } },
+        finishedAt: { title: "结束时间", type: "datetime", column: { width: 155 } }
       } as any,
       rowHandle: {
         fixed: "right",

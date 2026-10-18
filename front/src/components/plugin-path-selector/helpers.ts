@@ -12,6 +12,35 @@ export function parsePathInput(value: string | string[] | null | undefined): str
   return [...new Set(values.map((item) => String(item).trim()).filter(Boolean))];
 }
 
+export function getConfirmedPathSelection(multiple: boolean, selectedKeys: string[], checkedKeys: string[] | { checked: string[]; halfChecked: string[] }): string[] {
+  if (!multiple) {
+    return selectedKeys.slice(0, 1);
+  }
+  if (Array.isArray(checkedKeys)) {
+    return parsePathInput(checkedKeys);
+  }
+  return parsePathInput(checkedKeys.checked);
+}
+
+export function findPathNode(nodes: PluginPathNode[], key: string): PluginPathNode | undefined {
+  for (const node of nodes) {
+    if (node.key === key) {
+      return node;
+    }
+    if (node.children) {
+      const foundNode = findPathNode(node.children, key);
+      if (foundNode) {
+        return foundNode;
+      }
+    }
+  }
+  return undefined;
+}
+
+export function isEmptyPathNode(node: PluginPathNode | undefined): boolean {
+  return Boolean(node && node.fileCount === 0 && node.directoryCount === 0);
+}
+
 export function formatPathInput(value: string | string[] | null | undefined): string {
   return parsePathInput(value).join("\n");
 }

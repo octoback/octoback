@@ -127,6 +127,14 @@ export default function (): CreateCrudOptionsRet<BackupLog> {
       content: () => h("div", { class: "backup-log-modal-content" }, [h("div", { class: "backup-log-terminal" }, renderLogContent(content))])
     });
   };
+  const statusDict = dict({
+    data: [
+      { value: "queued", label: "排队中", color: "default" },
+      { value: "running", label: "执行中", color: "processing" },
+      { value: "success", label: "成功", color: "success" },
+      { value: "failed", label: "失败", color: "error" }
+    ]
+  });
   return {
     crudOptions: {
       request: {
@@ -186,35 +194,36 @@ export default function (): CreateCrudOptionsRet<BackupLog> {
           column: { show: false }
         },
         planName: { title: "备份计划", type: "text", column: { width: 150 } },
+        progress: { title: "进度", type: "number", column: { width: 150, component: { name: "a-progress", vModel: "percent", size: "small" } } },
+        stage: { title: "阶段", type: "text", column: { width: 100 } },
         status: {
           title: "状态",
           type: "dict-select",
-          dict: dict({
-            data: [
-              { value: "queued", label: "排队中", color: "default" },
-              { value: "running", label: "执行中", color: "processing" },
-              { value: "success", label: "成功", color: "success" },
-              { value: "failed", label: "失败", color: "error" }
-            ]
-          })
+          search: { show: true },
+          dict: statusDict,
+          column: {
+            width: 120,
+            cellRender: ({ value, row }: any) => {
+              return (
+                <div class="flex items-center">
+                  <fs-values-format modelValue={value} dict={statusDict}></fs-values-format>
+                  {value === "failed" && (
+                    <a-tooltip class="ml-2" title={row.error}>
+                      <fs-icon icon="bx:error-circle" size={16}></fs-icon>
+                    </a-tooltip>
+                  )}
+                </div>
+              );
+            }
+          }
         },
-        progress: { title: "进度", type: "number", column: { width: 150, component: { name: "a-progress", vModel: "percent", size: "small" } } },
-        stage: { title: "阶段", type: "text", column: { width: 100 } },
         startedAt: { title: "开始时间", type: "datetime", column: { width: 155 } },
         finishedAt: { title: "结束时间", type: "datetime", column: { width: 155 } },
         error: {
           title: "错误信息",
           type: "text",
           column: {
-            width: 240,
-            cellRender: ({ value }: { value?: string }) => {
-              const text = value || "-";
-              return (
-                <a-tooltip title={value || undefined}>
-                  <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</div>
-                </a-tooltip>
-              );
-            }
+            show: false
           }
         }
       } as any

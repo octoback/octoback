@@ -5,7 +5,7 @@
       <span v-if="!instanceId" class="plugin-path-selector__hint">保存来源后可浏览 SSH 目录</span>
     </div>
     <a-input-group v-else compact class="plugin-path-selector__single-input">
-      <a-input :value="formatPathInput(modelValue)" :placeholder="placeholder" readonly />
+      <a-input :value="formatPathInput(modelValue)" :placeholder="placeholder" @update:value="onInput" />
       <a-button :disabled="!instanceId" @click="openPicker">选择目录</a-button>
     </a-input-group>
     <a-textarea v-if="multiple" :value="formatPathInput(modelValue)" :placeholder="placeholder" :auto-size="{ minRows: 3, maxRows: 8 }" @update:value="onInput" />
@@ -45,7 +45,7 @@ defineOptions({
 
 import { computed, ref } from "vue";
 import { executePluginInstanceAction } from "/src/views/sys/plugin/plugin-api";
-import { formatPathInput, getDirectoryRequestPath, normalizePathNodes, parsePathInput, updatePathNodeChildren, updatePathNodeCounts, type PluginPathNode } from "./helpers";
+import { findPathNode, formatPathInput, getConfirmedPathSelection, getDirectoryRequestPath, normalizePathNodes, parsePathInput, updatePathNodeChildren, updatePathNodeCounts, type PluginPathNode } from "./helpers";
 
 const props = withDefaults(defineProps<{ modelValue?: string | string[]; multiple?: boolean; placeholder?: string; modalTitle?: string; instanceId?: string | number; action?: string; accessId?: string | number }>(), {
   multiple: true,
@@ -53,7 +53,10 @@ const props = withDefaults(defineProps<{ modelValue?: string | string[]; multipl
   modalTitle: "选择备份目录",
   action: "onListPaths"
 });
-const emit = defineEmits<{ (event: "update:modelValue", value: string[]): void }>();
+const emit = defineEmits<{
+  (event: "update:modelValue", value: string[]): void;
+  (event: "path-status", value: boolean | undefined): void;
+}>();
 const pickerOpen = ref(false);
 const loading = ref(false);
 const errorMessage = ref("");
@@ -65,7 +68,12 @@ const selectedPaths = computed(() => (Array.isArray(checkedKeys.value) ? checked
 const visibleSelectedPaths = computed(() => selectedPaths.value.slice(0, 3));
 
 function onInput(value: string) {
-  emit("update:modelValue", parsePathInput(value));
+  errorMessage.value = "";
+  if (!props.multiple) {
+    emit("path-status", undefined);
+  }
+  const paths = parsePathInput(value);
+  emit("update:modelValue", props.multiple ? paths : paths.slice(0, 1));
 }
 async function openPicker() {
   if (!props.instanceId) return;
@@ -110,16 +118,21 @@ async function loadData(node: PluginPathNode & { children?: PluginPathNode[] }) 
   }
 }
 function confirmSelection() {
-  if (!props.multiple) {
-    emit("update:modelValue", selectedKeys.value.slice(0, 1));
-    pickerOpen.value = false;
+  const confirmedPaths = getConfirmedPathSelection(props.multiple, selectedKeys.value, checkedKeys.value);
+  if (!props.multiple && confirmedPaths.length === 0) {
+    errorMessage.value = "请选择节点";
     return;
   }
-  const selectedKeys = Array.isArray(checkedKeys.value) ? checkedKeys.value : checkedKeys.value.checked;
-  emit("update:modelValue", parsePathInput(selectedKeys));
+  if (!props.multiple) {
+    const selectedNode = findPathNode(treeData.value, confirmedPaths[0]);
+    emit("path-status", selectedNode ? selectedNode.fileCount === 0 && selectedNode.directoryCount === 0 : undefined);
+  }
+  emit("update:modelValue", confirmedPaths);
   pickerOpen.value = false;
 }
 function onSingleSelect(keys: string[]) {
+  errorMessage.value = "";
+  emit("path-status", undefined);
   selectedKeys.value = keys.slice(0, 1);
 }
 function removeSelectedPath(path: string) {
