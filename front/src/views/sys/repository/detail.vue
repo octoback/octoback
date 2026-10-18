@@ -662,6 +662,27 @@ async function checkRepository() {
     min-width: 0;
     padding: 8px 10px;
     border-bottom: 1px solid #e5e7eb;
+
+    .fs-copyable.inline {
+      display: flex;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .fs-copyable .text {
+      min-width: 0;
+      color: #263343;
+    }
+
+    .fs-copyable.show-on-hover .copy-button {
+      display: flex;
+      flex: 0 0 auto;
+      span {
+        color: #57d188;
+        background: #f0fff3;
+        border-color: #dff7e6;
+      }
+    }
   }
 
   .summary-item span {
@@ -678,22 +699,6 @@ async function checkRepository() {
   .snapshot-info-grid .summary-item strong {
     display: block;
     min-width: 0;
-  }
-
-  .snapshot-info-grid .summary-item :deep(.fs-copyable.inline) {
-    display: inline-flex;
-    width: 100%;
-    min-width: 0;
-  }
-
-  .snapshot-info-grid .summary-item :deep(.fs-copyable .text) {
-    min-width: 0;
-    color: #263343;
-  }
-
-  .snapshot-info-grid .summary-item :deep(.fs-copyable.show-on-hover .copy-button) {
-    display: flex;
-    flex: 0 0 auto;
   }
 
   .paths-heading {
