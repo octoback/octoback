@@ -1,6 +1,6 @@
 
 
-# OctoBackup 章鱼备份
+# OctoBack 章鱼备份
 
 <center>
 <img src="./front/public/logo/logo3.png" alt="章鱼备份logo" width="300" />
@@ -13,10 +13,6 @@
 直观的可视化界面，避免错误命令误操作。
 
 ![](./docs/images/show.png)
-
-备份快照详情
-
-![](./docs/images/snapshot.png)
 
 
 ## 核心能力
@@ -34,6 +30,11 @@
  - 备份数据管理
      1. 可视化查看备份数据
      2. 从备份repo恢复数据到目标主机
+
+
+备份快照详情
+
+![](./docs/images/snapshot.png)
 
 
 
