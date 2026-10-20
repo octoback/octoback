@@ -2,22 +2,78 @@ package restic
 
 import (
 	"context"
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
+
+	sshaccess "handfree-work/octo-backup/internal/plugins/access/ssh"
 )
 
 type recordingExecutor struct {
-	args []string
-	env  []string
+	args                  []string
+	env                   []string
+	events                []string
+	repositoryAccessError error
 }
 
-func (e *recordingExecutor) Prepare(context.Context, *ClientConfig) error           { return nil }
-func (e *recordingExecutor) PrepareRepository(context.Context, *ClientConfig) error { return nil }
-func (e *recordingExecutor) Close() error                                           { return nil }
+func (e *recordingExecutor) Prepare(context.Context, *ClientConfig) error {
+	e.events = append(e.events, "prepare")
+	return nil
+}
+func (e *recordingExecutor) PrepareRepositoryAccess(context.Context, *ClientConfig) error {
+	e.events = append(e.events, "check-repository-access")
+	return e.repositoryAccessError
+}
+func (e *recordingExecutor) PrepareRepository(context.Context, *ClientConfig) error {
+	e.events = append(e.events, "prepare-repository")
+	return nil
+}
+func (e *recordingExecutor) Close() error { return nil }
 func (e *recordingExecutor) Execute(_ context.Context, args, env []string) ([]byte, error) {
+	e.events = append(e.events, "execute")
 	e.args = args
 	e.env = env
 	return []byte(`{"total_size":1}`), nil
+}
+
+func TestSnapshotsChecksSFTPAccessBeforeExecutingRestic(t *testing.T) {
+	config := ClientConfig{
+		Environment:        LocalResticEnvironment,
+		RepositoryAccess:   &sshaccess.SshAccess{Host: "repo.example.com", Username: "backup", Port: 22},
+		RepositoryPath:     "/backups",
+		RepositoryPassword: "repo-password",
+	}
+	client := NewResticClient(nil, config)
+	executor := &recordingExecutor{}
+	client.executor = executor
+
+	if _, err := client.Snapshots(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	wantEvents := []string{"prepare", "check-repository-access", "execute"}
+	if !reflect.DeepEqual(executor.events, wantEvents) {
+		t.Fatalf("operation order = %#v, want %#v", executor.events, wantEvents)
+	}
+}
+
+func TestSnapshotsStopsWhenSFTPAccessCheckFails(t *testing.T) {
+	config := ClientConfig{
+		Environment:        LocalResticEnvironment,
+		RepositoryAccess:   &sshaccess.SshAccess{Host: "repo.example.com", Username: "backup", Port: 22},
+		RepositoryPath:     "/backups",
+		RepositoryPassword: "repo-password",
+	}
+	client := NewResticClient(nil, config)
+	executor := &recordingExecutor{repositoryAccessError: errors.New("connection refused")}
+	client.executor = executor
+
+	if _, err := client.Snapshots(context.Background()); err == nil || !strings.Contains(err.Error(), "connection refused") {
+		t.Fatalf("Snapshots() error = %v, want SFTP connection failure", err)
+	}
+	if len(executor.events) != 2 || !reflect.DeepEqual(executor.events, []string{"prepare", "check-repository-access"}) {
+		t.Fatalf("Restic executed after SFTP check failed: %#v", executor.events)
+	}
 }
 
 func TestAliOSSRepositoryConfigUsesS3URLAndCredentials(t *testing.T) {
