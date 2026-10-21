@@ -7,7 +7,6 @@ import (
 	"handfree-work/octo-backup/internal/models"
 	"handfree-work/octo-backup/internal/svc"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -76,24 +75,27 @@ func TestLogContentReturnsReadableContentAndSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlDb.Close() })
-	if err := database.AutoMigrate(&models.BackupLog{}, &models.BackupLogContent{}); err != nil {
+	if err := database.AutoMigrate(&models.BackupTask{}, &models.BackupTaskLog{}); err != nil {
 		t.Fatal(err)
 	}
-	logRow := &models.BackupLog{PlanId: 1, Status: "success", Summary: `{"snapshot_id":"abc123","total_files_processed":8}`}
+	logRow := &models.BackupTask{PlanId: 1, Status: "success", Summary: `{"snapshot_id":"abc123","total_files_processed":8}`}
 	if err := database.Create(logRow).Error; err != nil {
 		t.Fatal(err)
 	}
-	logContent := &models.BackupLogContent{BackupLogId: *logRow.Id, Content: "[INFO] cron 触发\n[INFO] 执行完成\n"}
-	if err := database.Create(logContent).Error; err != nil {
+	for _, message := range []string{"cron 触发", "执行完成"} {
+		logContent := &models.BackupTaskLog{BackupTaskId: *logRow.Id, Level: "INFO", Message: message, CreatedAt: 1}
+		if err := database.Create(logContent).Error; err != nil {
 		t.Fatal(err)
+		}
 	}
 	service := NewBackupPlanService(context.Background(), &svc.ServiceContext{Db: database})
 	detail, err := service.LogContent(*logRow.Id)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(detail["content"].(string), "cron 触发") {
-		t.Fatalf("content = %v", detail["content"])
+	logs := detail["logs"].([]models.BackupTaskLog)
+	if len(logs) != 2 || logs[0].Message != "cron 触发" {
+		t.Fatalf("logs = %v", logs)
 	}
 	encoded, err := json.Marshal(detail["summary"])
 	if err != nil {

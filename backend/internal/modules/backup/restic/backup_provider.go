@@ -10,6 +10,7 @@ type ClientConfig struct {
 	Environment           ResticEnvironment
 	ExecutionAccess       *sshaccess.SshAccess
 	RepositoryAccess      *sshaccess.SshAccess
+	RepositoryAccessId    int64
 	RepositoryPath        string
 	RepositoryURL         string
 	RepositoryPassword    string
@@ -20,12 +21,6 @@ type ClientConfig struct {
 	ResticBinaryPath      string
 	Compression           string
 	KeepPolicy            map[string]any
-	KeepLast              int
-	KeepHourly            int
-	KeepDaily             int
-	KeepWeekly            int
-	KeepMonthly           int
-	KeepYearly            int
 	Progress              func(progress int, stage string)
 	Log                   func(level string, message string)
 }

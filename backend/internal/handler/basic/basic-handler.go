@@ -59,16 +59,6 @@ func Register(app *fiber.App) {
 	app.Get("/swagger/*", swaggerAsset)
 }
 
-// BaseHandlersRegister 保留基础 404 处理器的装配入口。
-func BaseHandlersRegister(app *fiber.App) {
-	app.Use(NotFound)
-}
-
-// NotFound returns custom 404 page.
-func NotFound(c fiber.Ctx) error {
-	return c.Status(fiber.StatusNotFound).SendFile("./static/private/404.html")
-}
-
 func swaggerDocument() (string, error) {
 	document := docs.SwaggerInfo.ReadDoc()
 	var specification map[string]any

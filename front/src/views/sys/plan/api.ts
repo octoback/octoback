@@ -38,12 +38,12 @@ export const runBackupPlan = (id: number) => request({ url: `/plan/run?id=${id}`
 export const getBackupRunInfo = (id: number) => request({ url: `/plan/run/info?id=${id}`, method: "post", data: {} });
 export interface BackupRunLogDetail {
   id: number;
-  content?: string;
+  logs?: Array<{ id: number; level: string; message: string; createdAt: number }>;
   summary?: Record<string, unknown> | null;
 }
 export const getBackupRunLog = (id: number) => request({ url: `/plan/run/log?id=${id}`, method: "post", data: {} });
 export const getBackupRunPage = (data: Record<string, unknown> = {}) => request({ url: "/plan/run/page", method: "post", data });
-export interface BackupLog {
+export interface BackupTask {
   id: number;
   planId: number;
   planName?: string;

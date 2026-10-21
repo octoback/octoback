@@ -1,4 +1,4 @@
-package user
+package sys
 
 import (
 	"strconv"
@@ -12,8 +12,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-// Register 注册认证与用户管理接口。
-func Register(app *fiber.App, svcCtx *svc.ServiceContext) {
+// RegisterUsers 注册用户管理接口。
+func RegisterUsers(app *fiber.App, svcCtx *svc.ServiceContext) {
 	users := app.Group("/api/user")
 	web_.RegisterRoutes(users, svcCtx.Auth,
 		web_.Route{Path: "/create", Permission: web_.Admin, Handler: web_.HandleJSON(createUser(svcCtx))},
@@ -39,7 +39,7 @@ func Register(app *fiber.App, svcCtx *svc.ServiceContext) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
-// @Router /api/users/create [post]
+// @Router /api/user/create [post]
 func createUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.CreateUserInput) (any, error) {
 	return func(c fiber.Ctx, input *logic.CreateUserInput) (any, error) {
 		defer web_.AuditLog(c, "创建用户")
@@ -56,7 +56,8 @@ func createUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.CreateUserInp
 // @Success 200 {object} UserListResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
-// @Router /api/users/list [post]
+// @Router /api/user/list [post]
+// @Router /api/user/page [post]
 func listUsers(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.UserPageQuery) (any, error) {
 	return func(c fiber.Ctx, query *logic.UserPageQuery) (any, error) {
 		return logic.NewUserService(c.Context(), svcCtx).FindPage(query)
@@ -69,13 +70,13 @@ func listUsers(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.UserPageQuery)
 // @Tags 用户
 // @Produce json
 // @Security bearerAuth
-// @Param id path int true "用户 Id"
+// @Param id query int true "用户 Id"
 // @Success 200 {object} UserResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/users/{id}/detail [post]
+// @Router /api/user/info [post]
 func getUser(svcCtx *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 	return func(c fiber.Ctx) (any, error) {
 		id, err := parseUserId(c)
@@ -93,14 +94,14 @@ func getUser(svcCtx *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 // @Accept json
 // @Produce json
 // @Security bearerAuth
-// @Param id path int true "用户 Id"
+// @Param id query int true "用户 Id"
 // @Param request body logic.UpdateUserInput true "更新信息"
 // @Success 200 {object} UserResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/users/{id}/update [post]
+// @Router /api/user/update [post]
 func updateUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.UpdateUserInput) (any, error) {
 	return func(c fiber.Ctx, input *logic.UpdateUserInput) (any, error) {
 		defer web_.AuditLog(c, "更新用户")
@@ -128,13 +129,13 @@ func updateUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.UpdateUserInp
 // @Tags 用户
 // @Produce json
 // @Security bearerAuth
-// @Param id path int true "用户 Id"
+// @Param id query int true "用户 Id"
 // @Success 204
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/users/{id}/delete [post]
+// @Router /api/user/delete [post]
 func deleteUser(svcCtx *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 	return func(c fiber.Ctx) (any, error) {
 		defer web_.AuditLog(c, "删除用户")
@@ -153,6 +154,19 @@ type batchDeleteInput struct {
 	IDs []int64 `json:"ids"`
 }
 
+// batchDeleteUser godoc
+// @Summary 批量删除用户
+// @Description 需要 admin 权限。
+// @Tags 用户
+// @Accept json
+// @Produce json
+// @Security bearerAuth
+// @Param request body batchDeleteInput true "用户 Id 列表"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Router /api/user/batchDelete [post]
 func batchDeleteUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *batchDeleteInput) (any, error) {
 	return func(c fiber.Ctx, input *batchDeleteInput) (any, error) {
 		defer web_.AuditLog(c, "批量删除用户")
@@ -187,14 +201,5 @@ type UserResponse struct {
 type UserListResponse struct {
 	Data struct {
 		Items []map[string]any `json:"items"`
-	} `json:"data"`
-}
-
-// LoginResponse 表示登录成功响应。
-type LoginResponse struct {
-	Data struct {
-		Token     string         `json:"token"`
-		ExpiresAt int64          `json:"expiresAt"`
-		User      map[string]any `json:"user"`
 	} `json:"data"`
 }

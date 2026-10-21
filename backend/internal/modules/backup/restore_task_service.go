@@ -60,23 +60,9 @@ func appendRestoreTaskLog(db *gorm.DB, taskId int64, level, message string) {
 	if db == nil || taskId <= 0 || strings.TrimSpace(message) == "" {
 		return
 	}
-	entry := backupLogEntry(level, message)
-	var content models.RestoreTaskContent
-	result := db.Where("restore_task_id = ?", taskId).First(&content)
-	if result.Error == gorm.ErrRecordNotFound {
-		content = models.RestoreTaskContent{RestoreTaskId: taskId, Content: entry}
-		if err := db.Create(&content).Error; err != nil {
-			log_.Logger.Warn("创建恢复任务日志失败", zap.Int64("restoreTaskId", taskId), zap.Error(err))
-		}
-		return
-	}
-	if result.Error != nil {
-		log_.Logger.Warn("读取恢复任务日志失败", zap.Int64("restoreTaskId", taskId), zap.Error(result.Error))
-		return
-	}
-	content.Content += entry
-	if err := db.Model(&models.RestoreTaskContent{}).Where("restore_task_id = ?", taskId).Update("content", content.Content).Error; err != nil {
-		log_.Logger.Warn("追加恢复任务日志失败", zap.Int64("restoreTaskId", taskId), zap.Error(err))
+	row := models.RestoreTaskLog{RestoreTaskId: taskId, Level: strings.ToUpper(strings.TrimSpace(level)), Message: strings.TrimSpace(message), CreatedAt: time.Now().UnixMilli()}
+	if err := db.Create(&row).Error; err != nil {
+		log_.Logger.Warn("创建恢复任务日志失败", zap.Int64("restoreTaskId", taskId), zap.Error(err))
 	}
 }
 
@@ -254,14 +240,11 @@ func (s *RestoreTaskService) Info(id int64) (map[string]any, error) {
 
 // LogContent 查询恢复任务保存的完整可读执行日志。
 func (s *RestoreTaskService) LogContent(id int64) (map[string]any, error) {
-	var content models.RestoreTaskContent
-	if err := s.svcCtx.Db.Where("restore_task_id = ?", id).First(&content).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return map[string]any{"id": id, "content": ""}, nil
-		}
+	var logs []models.RestoreTaskLog
+	if err := s.svcCtx.Db.Where("restore_task_id = ?", id).Order("id asc").Find(&logs).Error; err != nil {
 		return nil, error_.NewApiError(err)
 	}
-	return map[string]any{"id": id, "content": content.Content}, nil
+	return map[string]any{"id": id, "logs": logs}, nil
 }
 
 // Page 分页查询恢复任务记录。
@@ -340,7 +323,7 @@ func (s *RestoreTaskService) Delete(id int64) error {
 		return error_.NewTextError("运行中的恢复任务不能删除")
 	}
 	tx := s.svcCtx.Db.Begin()
-	if err := tx.Where("restore_task_id = ?", id).Delete(&models.RestoreTaskContent{}).Error; err != nil {
+	if err := tx.Where("restore_task_id = ?", id).Delete(&models.RestoreTaskLog{}).Error; err != nil {
 		tx.Rollback()
 		return error_.NewWrapError("删除恢复任务日志失败", err)
 	}

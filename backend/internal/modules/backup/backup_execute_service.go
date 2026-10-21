@@ -35,8 +35,8 @@ func NewBackupExecuteService(ctx context.Context, s *svc.ServiceContext) *Backup
 	return &BackupExecuteService{ctx: ctx, svcCtx: s}
 }
 
-// backupLogEntry 将日志级别和消息编码为可读的单行日志。
-func backupLogEntry(level string, message string) string {
+// backupTaskEntry 将日志级别和消息编码为可读的单行日志。
+func backupTaskEntry(level string, message string) string {
 	level = strings.ToUpper(strings.TrimSpace(level))
 	if level != "WARN" && level != "ERROR" {
 		level = "INFO"
@@ -60,34 +60,19 @@ func serializeBackupStats(stats map[string]any) (string, error) {
 	return serializeBackupSummary(stats)
 }
 
-func appendBackupLog(db *gorm.DB, logId int64, level string, message string) {
+func appendBackupTask(db *gorm.DB, logId int64, level string, message string) {
 	if db == nil || logId <= 0 || strings.TrimSpace(message) == "" {
 		return
 	}
-	entry := backupLogEntry(level, message)
-	var content models.BackupLogContent
-	result := db.Where("backup_log_id = ?", logId).First(&content)
-	if result.Error == gorm.ErrRecordNotFound {
-		content = models.BackupLogContent{BackupLogId: logId, Content: entry}
-		if err := db.Create(&content).Error; err != nil {
-			log_.Logger.Warn("创建备份日志内容失败", zap.Int64("logId", logId), zap.Error(err))
-		}
-		return
-	}
-	if result.Error != nil {
-		log_.Logger.Warn("读取备份日志内容失败", zap.Int64("logId", logId), zap.Error(result.Error))
-		return
-	}
-	content.Content += entry
-	if err := db.Model(&models.BackupLogContent{}).Where("backup_log_id = ?", logId).Update("content", content.Content).Error; err != nil {
-		log_.Logger.Warn("追加备份日志内容失败", zap.Int64("logId", logId), zap.Error(err))
+	if err := db.Create(&models.BackupTaskLog{BackupTaskId: logId, Level: strings.ToUpper(strings.TrimSpace(level)), Message: strings.TrimSpace(message), CreatedAt: time.Now().UnixMilli()}).Error; err != nil {
+		log_.Logger.Warn("创建备份任务日志失败", zap.Int64("backupTaskId", logId), zap.Error(err))
 	}
 }
 
 func (s *BackupExecuteService) Execute(id int64, logId int64) (*BackupExecuteResult, error) {
 	currentProgress := 0
 	appendLog := func(level string, message string) {
-		appendBackupLog(s.svcCtx.Db, logId, level, message)
+		appendBackupTask(s.svcCtx.Db, logId, level, message)
 	}
 	updateLog := func(status string, nextProgress int, stage, result, message string) {
 		if status == "failed" && nextProgress == 100 {
@@ -99,7 +84,7 @@ func (s *BackupExecuteService) Execute(id int64, logId int64) (*BackupExecuteRes
 		if status == "success" || status == "failed" {
 			fields["finished_at"] = now
 		}
-		_ = s.svcCtx.Db.Model(&models.BackupLog{}).Where("id = ?", logId).Updates(fields).Error
+		_ = s.svcCtx.Db.Model(&models.BackupTask{}).Where("id = ?", logId).Updates(fields).Error
 		level := "INFO"
 		logMessage := stage
 		if message != "" {
@@ -117,7 +102,7 @@ func (s *BackupExecuteService) Execute(id int64, logId int64) (*BackupExecuteRes
 		if data == "" {
 			return
 		}
-		if err := s.svcCtx.Db.Model(&models.BackupLog{}).Where("id = ?", logId).Update("summary", data).Error; err != nil {
+		if err := s.svcCtx.Db.Model(&models.BackupTask{}).Where("id = ?", logId).Update("summary", data).Error; err != nil {
 			appendLog("WARN", "保存 Restic summary 失败："+err.Error())
 		}
 	}
@@ -130,7 +115,7 @@ func (s *BackupExecuteService) Execute(id int64, logId int64) (*BackupExecuteRes
 		if data == "" {
 			return
 		}
-		if err := s.svcCtx.Db.Model(&models.BackupLog{}).Where("id = ?", logId).Update("stats", data).Error; err != nil {
+		if err := s.svcCtx.Db.Model(&models.BackupTask{}).Where("id = ?", logId).Update("stats", data).Error; err != nil {
 			appendLog("WARN", "保存 Restic stats 失败："+err.Error())
 		}
 	}
@@ -198,7 +183,7 @@ func (s *BackupExecuteService) Execute(id int64, logId int64) (*BackupExecuteRes
 		return nil, error_.NewTextError("%s", message)
 	}
 	saveStats(result.Stats)
-	_ = s.svcCtx.Db.Model(&models.BackupLog{}).Where("id = ?", logId).Updates(map[string]any{"plan_id": plan.Id, "source_id": plan.SourceId, "repository_id": plan.RepositoryId, "snapshot_id": result.SnapshotId}).Error
+	_ = s.svcCtx.Db.Model(&models.BackupTask{}).Where("id = ?", logId).Updates(map[string]any{"plan_id": plan.Id, "source_id": plan.SourceId, "repository_id": plan.RepositoryId, "snapshot_id": result.SnapshotId}).Error
 	setStatus("success", "")
 	updateLog("success", 100, "完成", "", "")
 	return &BackupExecuteResult{Id: id, Status: result.Status}, nil
@@ -269,7 +254,7 @@ func (s *BackupExecuteService) doBackup(plan *models.BackupPlan, source plugin.P
 		result.Stats = stats
 		appendLog("INFO", "快照统计查询完成")
 	}
-	if _, refreshErr := instance.RefreshRepositoryData(plan.RepositoryId, result.Summary); refreshErr != nil {
+	if _, refreshErr := instance.RefreshRepositoryData(plan.RepositoryId); refreshErr != nil {
 		appendLog("WARN", "备份完成后刷新仓库详情缓存失败："+refreshErr.Error())
 		log_.Logger.Warn("备份完成后刷新仓库详情缓存失败", zap.Int64("repositoryId", plan.RepositoryId), zap.Error(refreshErr))
 	} else {

@@ -11,10 +11,246 @@ import (
 	"handfree-work/octo-backup/internal/base/db_"
 	"handfree-work/octo-backup/internal/models"
 	"handfree-work/octo-backup/internal/modules/plugin"
+	sshaccess "handfree-work/octo-backup/internal/plugins/access/ssh"
+	sftprepository "handfree-work/octo-backup/internal/plugins/repository/sftp"
 	"handfree-work/octo-backup/internal/svc"
 )
 
-func TestAttachSnapshotAssociationsIncludesBackupSummary(t *testing.T) {
+func TestResticRepositoryConfigPreservesSSHAccessId(t *testing.T) {
+	database, err := db_.OpenSQLite(filepath.Join(t.TempDir(), "repository-access-id.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := db_.Migrate(database, &models.PluginInstance{}, &models.SysSetting{}); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := plugin.NewRegistry()
+	accessDefinition, err := (sshaccess.Provider{}).Definition()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Register(accessDefinition); err != nil {
+		t.Fatal(err)
+	}
+	repositoryDefinition, err := (sftprepository.Provider{}).Definition()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Register(repositoryDefinition); err != nil {
+		t.Fatal(err)
+	}
+	service := NewPluginInstanceService(context.Background(), &svc.ServiceContext{Db: database, Plugins: registry})
+	access, err := service.Create(&PluginInstanceInput{
+		Name:       "仓库 SSH",
+		PluginType: "access",
+		PluginName: "access.ssh",
+		Config: map[string]any{
+			"host": "repo.example.com", "port": 22, "username": "backup", "password": "login-password",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	accessId := *access["id"].(*int64)
+	repository, err := service.Create(&PluginInstanceInput{
+		Name:       "SFTP 仓库",
+		PluginType: "repository",
+		PluginName: "repository.sftp",
+		Config:     map[string]any{"path": "/backups", "accessId": accessId, "password": "repo-password"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config, err := service.ResticRepositoryConfig(*repository["id"].(*int64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.RepositoryAccessId != accessId {
+		t.Fatalf("RepositoryAccessId = %d, want %d", config.RepositoryAccessId, accessId)
+	}
+}
+
+func TestCachedRepositoryDataRefreshesWhenCacheIsMissing(t *testing.T) {
+	database, err := db_.OpenSQLite(filepath.Join(t.TempDir(), "repository-snapshots.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := db_.Migrate(database, &models.PluginInstance{}, &models.RepositoryInfo{}); err != nil {
+		t.Fatal(err)
+	}
+	repository := &models.PluginInstance{
+		Name:       "repository",
+		PluginType: string(plugin.TypeRepository),
+		PluginName: "repository.missing",
+	}
+	if err := database.Create(repository).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewPluginInstanceService(context.Background(), &svc.ServiceContext{
+		Db:      database,
+		Plugins: plugin.NewRegistry(),
+	})
+	data, err := service.CachedRepositoryData(*repository.Id)
+	if err == nil {
+		t.Fatalf("CachedRepositoryData() = %#v, nil error; want cache miss to trigger a repository refresh", data)
+	}
+	if !strings.Contains(err.Error(), "插件不存在") {
+		t.Fatalf("refresh error = %v, want missing repository plugin context", err)
+	}
+}
+
+func TestCachedRepositoryDataRefreshesWhenSnapshotDataIsMissing(t *testing.T) {
+	database, err := db_.OpenSQLite(filepath.Join(t.TempDir(), "repository-snapshots-incomplete.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := db_.Migrate(database, &models.PluginInstance{}, &models.RepositoryInfo{}); err != nil {
+		t.Fatal(err)
+	}
+	repository := &models.PluginInstance{
+		Name:       "repository",
+		PluginType: string(plugin.TypeRepository),
+		PluginName: "repository.missing",
+	}
+	if err := database.Create(repository).Error; err != nil {
+		t.Fatal(err)
+	}
+	repositoryId := *repository.Id
+	if err := database.Create(&models.RepositoryInfo{
+		RepositoryId: &repositoryId,
+		Content:      "stats: {}\n",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewPluginInstanceService(context.Background(), &svc.ServiceContext{
+		Db:      database,
+		Plugins: plugin.NewRegistry(),
+	})
+	data, err := service.CachedRepositoryData(repositoryId)
+	if err == nil {
+		t.Fatalf("CachedRepositoryData() = %#v, nil error; want missing snapshots to trigger a repository refresh", data)
+	}
+	if !strings.Contains(err.Error(), "插件不存在") {
+		t.Fatalf("refresh error = %v, want missing repository plugin context", err)
+	}
+}
+
+func TestCachedRepositoryDataRefreshesWhenRepositoryStatsAreMissing(t *testing.T) {
+	database, err := db_.OpenSQLite(filepath.Join(t.TempDir(), "repository-stats-incomplete.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := db_.Migrate(database, &models.PluginInstance{}, &models.RepositoryInfo{}); err != nil {
+		t.Fatal(err)
+	}
+	repository := &models.PluginInstance{Name: "repository", PluginType: string(plugin.TypeRepository), PluginName: "repository.missing"}
+	if err := database.Create(repository).Error; err != nil {
+		t.Fatal(err)
+	}
+	repositoryId := *repository.Id
+	if err := database.Create(&models.RepositoryInfo{RepositoryId: &repositoryId, Content: "snapshots: []\n"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := NewPluginInstanceService(context.Background(), &svc.ServiceContext{Db: database, Plugins: plugin.NewRegistry()})
+
+	data, err := service.CachedRepositoryData(repositoryId)
+	if err == nil {
+		t.Fatalf("CachedRepositoryData() = %#v, nil error; want missing stats to trigger a repository refresh", data)
+	}
+	if !strings.Contains(err.Error(), "插件不存在") {
+		t.Fatalf("refresh error = %v, want missing repository plugin context", err)
+	}
+}
+
+func TestCachedRepositoryDataKeepsCachedEmptySnapshotList(t *testing.T) {
+	database, err := db_.OpenSQLite(filepath.Join(t.TempDir(), "repository-snapshots-empty.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := db_.Migrate(database, &models.PluginInstance{}, &models.RepositoryInfo{}); err != nil {
+		t.Fatal(err)
+	}
+	repositoryId := int64(4)
+	if err := database.Create(&models.RepositoryInfo{
+		RepositoryId: &repositoryId,
+		Content:      "snapshots: []\nstats: {}\n",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := NewPluginInstanceService(context.Background(), &svc.ServiceContext{Db: database, Plugins: plugin.NewRegistry()})
+
+	data, err := service.CachedRepositoryData(repositoryId)
+	if err != nil {
+		t.Fatalf("CachedRepositoryData() error = %v; want valid empty snapshot cache", err)
+	}
+	snapshots, ok := data["snapshots"].([]any)
+	if !ok || len(snapshots) != 0 {
+		t.Fatalf("snapshots = %#v; want an empty cached list", data["snapshots"])
+	}
+}
+
+func TestCachedRepositoryDataReturnsCachedRepositoryStats(t *testing.T) {
+	database, err := db_.OpenSQLite(filepath.Join(t.TempDir(), "repository-stats-cache.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := db_.Migrate(database, &models.RepositoryInfo{}); err != nil {
+		t.Fatal(err)
+	}
+	repositoryId := int64(8)
+	if err := database.Create(&models.RepositoryInfo{
+		RepositoryId: &repositoryId,
+		Content:      "snapshots: []\nstats:\n  total_size: 1234\n  total_file_count: 9\n",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := NewPluginInstanceService(context.Background(), &svc.ServiceContext{Db: database, Plugins: plugin.NewRegistry()})
+
+	data, err := service.CachedRepositoryData(repositoryId)
+	if err != nil {
+		t.Fatalf("CachedRepositoryData() error = %v", err)
+	}
+	stats, ok := data["stats"].(map[string]any)
+	if !ok || stats["total_size"] != 1234 || stats["total_file_count"] != 9 {
+		t.Fatalf("cached stats = %#v; want repository stats", data["stats"])
+	}
+}
+
+func TestAttachSnapshotAssociationsIncludesBackupDetails(t *testing.T) {
 	database, err := db_.OpenSQLite(filepath.Join(t.TempDir(), "snapshot-summary.sqlite"))
 	if err != nil {
 		t.Fatal(err)
@@ -24,12 +260,13 @@ func TestAttachSnapshotAssociationsIncludesBackupSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	if err := database.AutoMigrate(&models.BackupLog{}); err != nil {
+	if err := database.AutoMigrate(&models.BackupTask{}); err != nil {
 		t.Fatal(err)
 	}
 	repositoryId := int64(7)
 	snapshotId := "snapshot-summary"
-	if err := database.Create(&models.BackupLog{PlanId: 3, RepositoryId: &repositoryId, SnapshotId: &snapshotId, Summary: `{"snapshot_id":"snapshot-summary","total_files_processed":12,"total_bytes_processed":4096}`}).Error; err != nil {
+	sourceId := int64(10)
+	if err := database.Create(&models.BackupTask{PlanId: 3, SourceId: &sourceId, RepositoryId: &repositoryId, SnapshotId: &snapshotId, Summary: `{"snapshot_id":"snapshot-summary","total_files_processed":12,"total_bytes_processed":4096}`, Stats: `{"total_file_count":13,"total_size":26604}`}).Error; err != nil {
 		t.Fatal(err)
 	}
 	service := NewPluginInstanceService(context.Background(), &svc.ServiceContext{Db: database})
@@ -48,6 +285,142 @@ func TestAttachSnapshotAssociationsIncludesBackupSummary(t *testing.T) {
 	}
 	if summary["snapshot_id"] != snapshotId || summary["total_files_processed"] != float64(12) {
 		t.Fatalf("summary = %#v", summary)
+	}
+	stats, ok := entry["stats"].(map[string]any)
+	attachedSourceId, sourceIdOk := entry["sourceId"].(*int64)
+	if !ok || stats["total_file_count"] != float64(13) || !sourceIdOk || *attachedSourceId != sourceId || entry["planId"] != int64(3) {
+		t.Fatalf("backup-log details not attached: %#v", entry)
+	}
+}
+
+func TestAttachSnapshotAssociationsOmitsMissingSummary(t *testing.T) {
+	database, err := db_.OpenSQLite(filepath.Join(t.TempDir(), "snapshot-summary-empty.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := database.AutoMigrate(&models.BackupTask{}); err != nil {
+		t.Fatal(err)
+	}
+	repositoryId := int64(7)
+	knownSnapshotId := "snapshot-without-summary"
+	if err := database.Create(&models.BackupTask{
+		PlanId:       3,
+		RepositoryId: &repositoryId,
+		SnapshotId:   &knownSnapshotId,
+		Status:       "success",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewPluginInstanceService(context.Background(), &svc.ServiceContext{Db: database})
+	attached := service.attachSnapshotAssociations(repositoryId, []any{
+		map[string]any{"id": knownSnapshotId},
+		map[string]any{"id": "snapshot-without-backup-log"},
+	}).([]any)
+	for _, item := range attached {
+		entry := item.(map[string]any)
+		if _, exists := entry["summary"]; exists {
+			t.Fatalf("snapshot %q has summary %#v; want summary omitted", entry["id"], entry["summary"])
+		}
+	}
+}
+
+func TestSnapshotStatsReturnsBackupLogCacheWithoutRestic(t *testing.T) {
+	database, err := db_.OpenSQLite(filepath.Join(t.TempDir(), "snapshot-stats-cache.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := database.AutoMigrate(&models.BackupTask{}); err != nil {
+		t.Fatal(err)
+	}
+	repositoryId := int64(7)
+	snapshotId := "cached-snapshot"
+	if err := database.Create(&models.BackupTask{
+		PlanId:       3,
+		RepositoryId: &repositoryId,
+		SnapshotId:   &snapshotId,
+		Status:       "success",
+		Stats:        `{"total_size":1234,"total_file_count":8}`,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := NewPluginInstanceService(context.Background(), &svc.ServiceContext{Db: database, Plugins: plugin.NewRegistry()})
+
+	stats, err := service.SnapshotStats(repositoryId, snapshotId)
+	if err != nil {
+		t.Fatalf("SnapshotStats() error = %v; want cached stats", err)
+	}
+	if stats["total_size"] != float64(1234) || stats["total_file_count"] != float64(8) {
+		t.Fatalf("SnapshotStats() = %#v; want cached values", stats)
+	}
+}
+
+func TestSnapshotStatsFetchesAndPersistsMissingStats(t *testing.T) {
+	database, err := db_.OpenSQLite(filepath.Join(t.TempDir(), "snapshot-stats-refresh.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := database.AutoMigrate(&models.BackupTask{}); err != nil {
+		t.Fatal(err)
+	}
+	repositoryId := int64(9)
+	snapshotId := "snapshot-needing-stats"
+	if err := database.Create(&models.BackupTask{
+		PlanId:       3,
+		RepositoryId: &repositoryId,
+		SnapshotId:   &snapshotId,
+		Status:       "success",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := NewPluginInstanceService(context.Background(), &svc.ServiceContext{Db: database})
+	fetchCount := 0
+	fetchStats := func() (map[string]any, error) {
+		fetchCount++
+		return map[string]any{"total_size": float64(42), "total_file_count": float64(3)}, nil
+	}
+	stats, err := service.loadSnapshotStats(repositoryId, snapshotId, fetchStats)
+	if err != nil {
+		t.Fatalf("loadSnapshotStats() error = %v", err)
+	}
+	if stats["total_size"] != float64(42) || stats["total_file_count"] != float64(3) {
+		t.Fatalf("loadSnapshotStats() = %#v; want fetched stats", stats)
+	}
+	if fetchCount != 1 {
+		t.Fatalf("stats fetch count = %d; want 1", fetchCount)
+	}
+	var log models.BackupTask
+	if err := database.Where("repository_id = ? AND snapshot_id = ?", repositoryId, snapshotId).First(&log).Error; err != nil {
+		t.Fatal(err)
+	}
+	var storedStats map[string]any
+	if err := json.Unmarshal([]byte(log.Stats), &storedStats); err != nil {
+		t.Fatalf("stored stats %q are invalid JSON: %v", log.Stats, err)
+	}
+	if storedStats["total_size"] != float64(42) || storedStats["total_file_count"] != float64(3) {
+		t.Fatalf("stored stats = %#v; want values returned to caller", storedStats)
+	}
+	stats, err = service.loadSnapshotStats(repositoryId, snapshotId, func() (map[string]any, error) {
+		t.Fatal("cached stats should not invoke Restic")
+		return nil, nil
+	})
+	if err != nil || stats["total_size"] != float64(42) || fetchCount != 1 {
+		t.Fatalf("cached load stats = %#v, error = %v, fetchCount = %d", stats, err, fetchCount)
 	}
 }
 

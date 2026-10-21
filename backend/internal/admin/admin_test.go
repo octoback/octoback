@@ -20,7 +20,7 @@ func testDatabase(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db_.Migrate(db, &models.User{}); err != nil {
+	if err := db_.Migrate(db, &models.SysUser{}); err != nil {
 		t.Fatal(err)
 	}
 	sqlDB, err := db.DB()
@@ -33,7 +33,7 @@ func testDatabase(t *testing.T) *gorm.DB {
 
 func TestResetPassword(t *testing.T) {
 	db := testDatabase(t)
-	user := &models.User{Username: "admin", Role: "admin", NickName: "管理员"}
+	user := &models.SysUser{Username: "admin", Role: "admin", NickName: "管理员"}
 	if err := user.EncryptPassword("old-password"); err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestResetPassword(t *testing.T) {
 	if err := ResetPassword(db, "admin", "new-password"); err != nil {
 		t.Fatal(err)
 	}
-	var updated models.User
+	var updated models.SysUser
 	if err := db.First(&updated, user.Id).Error; err != nil {
 		t.Fatal(err)
 	}

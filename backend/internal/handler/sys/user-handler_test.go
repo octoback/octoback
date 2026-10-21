@@ -1,4 +1,4 @@
-package user_test
+package sys_test
 
 import (
 	"bytes"
@@ -30,7 +30,7 @@ func TestUserCRUD(t *testing.T) {
 		t.Fatalf("DB() error = %v", err)
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	if err := db_.Migrate(db, &models.User{}); err != nil {
+	if err := db_.Migrate(db, &models.SysUser{}); err != nil {
 		t.Fatalf("Migrate() error = %v", err)
 	}
 	app := handler.NewApp(&svc.ServiceContext{

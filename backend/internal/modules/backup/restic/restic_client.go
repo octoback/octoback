@@ -172,7 +172,13 @@ func (p *ResticClient) prepareEnvironment(ctx context.Context) error {
 	if strings.TrimSpace(p.repositoryURL()) == "" || p.config.RepositoryPassword == "" {
 		return error_.NewTextError("Restic 仓库地址和密码不能为空")
 	}
-	return p.executor.Prepare(ctx, &p.config)
+	if err := p.executor.Prepare(ctx, &p.config); err != nil {
+		return err
+	}
+	if p.config.RepositoryAccess == nil {
+		return nil
+	}
+	return p.executor.CheckRepositoryAccess(ctx, &p.config)
 }
 
 type resticRemoteInfo struct {
@@ -375,10 +381,7 @@ func (p *ResticClient) repositoryEnvironment() []string {
 }
 
 func (p *ResticClient) sftpCommand() string {
-	if p.config.RepositoryAccess == nil {
-		return ""
-	}
-	return "ssh -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -p " + fmt.Sprint(p.config.RepositoryAccess.Port) + " " + shellQuote(p.config.RepositoryAccess.Username+"@"+p.config.RepositoryAccess.Host) + " -s sftp"
+	return repositorySftpCommand(&p.config)
 }
 
 func resticVersionMatches(output, expected string) bool {

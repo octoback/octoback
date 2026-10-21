@@ -3,9 +3,7 @@ package logic
 import (
 	"context"
 	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 
 	"handfree-work/octo-backup/internal/base/db_"
 	"handfree-work/octo-backup/internal/models"
@@ -23,7 +21,7 @@ func newRestoreTaskTestService(t *testing.T) *RestoreTaskService {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlDb.Close() })
-	if err := database.AutoMigrate(&models.RestoreTask{}, &models.RestoreTaskContent{}, &models.PluginInstance{}); err != nil {
+	if err := database.AutoMigrate(&models.RestoreTask{}, &models.RestoreTaskLog{}, &models.PluginInstance{}); err != nil {
 		t.Fatal(err)
 	}
 	return NewRestoreTaskService(context.Background(), &svc.ServiceContext{Db: database})
@@ -38,20 +36,15 @@ func TestAppendRestoreTaskLogAddsFormattedEntries(t *testing.T) {
 	appendRestoreTaskLog(service.svcCtx.Db, *task.Id, "INFO", "开始恢复")
 	appendRestoreTaskLog(service.svcCtx.Db, *task.Id, "ERROR", "恢复失败")
 
-	var content models.RestoreTaskContent
-	if err := service.svcCtx.Db.Where("restore_task_id = ?", *task.Id).First(&content).Error; err != nil {
+	var logs []models.RestoreTaskLog
+	if err := service.svcCtx.Db.Where("restore_task_id = ?", *task.Id).Order("id asc").Find(&logs).Error; err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{" [INFO] 开始恢复", " [ERROR] 恢复失败"} {
-		if !strings.Contains(content.Content, expected) {
-			t.Fatalf("恢复日志未追加 %q: %q", expected, content.Content)
-		}
+	if len(logs) != 2 || logs[0].Message != "开始恢复" || logs[1].Message != "恢复失败" {
+		t.Fatalf("恢复日志不正确: %#v", logs)
 	}
-	if !strings.HasSuffix(content.Content, "\n") {
-		t.Fatalf("恢复日志应以换行结束: %q", content.Content)
-	}
-	if _, err := time.Parse("2006-01-02 15:04:05.000", content.Content[:23]); err != nil {
-		t.Fatalf("恢复日志时间格式错误: %v", err)
+	if logs[0].CreatedAt <= 0 {
+		t.Fatal("恢复日志时间缺失")
 	}
 }
 
@@ -65,7 +58,7 @@ func TestRestoreLogContentReturnsEmptyForRunningTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if detail["content"] != "" {
+	if len(detail["logs"].([]models.RestoreTaskLog)) != 0 {
 		t.Fatalf("运行中的任务初始日志应为空: %#v", detail)
 	}
 }
@@ -109,7 +102,7 @@ func TestRestoreTaskDeleteRejectsRunningAndRemovesContent(t *testing.T) {
 	if err := service.svcCtx.Db.Create(&completed).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := service.svcCtx.Db.Create(&models.RestoreTaskContent{RestoreTaskId: *completed.Id, Content: "output"}).Error; err != nil {
+	if err := service.svcCtx.Db.Create(&models.RestoreTaskLog{RestoreTaskId: *completed.Id, Level: "INFO", Message: "output", CreatedAt: 1}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := service.Delete(*running.Id); err == nil {
@@ -120,7 +113,7 @@ func TestRestoreTaskDeleteRejectsRunningAndRemovesContent(t *testing.T) {
 	}
 	var taskCount, contentCount int64
 	service.svcCtx.Db.Model(&models.RestoreTask{}).Where("id = ?", *completed.Id).Count(&taskCount)
-	service.svcCtx.Db.Model(&models.RestoreTaskContent{}).Where("restore_task_id = ?", *completed.Id).Count(&contentCount)
+	service.svcCtx.Db.Model(&models.RestoreTaskLog{}).Where("restore_task_id = ?", *completed.Id).Count(&contentCount)
 	if taskCount != 0 || contentCount != 0 {
 		t.Fatalf("删除未清理任务和输出: task=%d content=%d", taskCount, contentCount)
 	}

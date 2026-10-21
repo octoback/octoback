@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-func TestBackupLogEntry(t *testing.T) {
-	entry := backupLogEntry("WARN", "远程任务轮询失败")
+func TestBackupTaskEntry(t *testing.T) {
+	entry := backupTaskEntry("WARN", "远程任务轮询失败")
 	if !strings.Contains(entry, "[WARN] 远程任务轮询失败") {
 		t.Fatalf("entry = %q", entry)
 	}

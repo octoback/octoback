@@ -13,6 +13,7 @@ var (
 	PermissionError     = ErrorCode{Code: 403, Format: "您没有权限访问"}
 	Timeout             = ErrorCode{Code: 408, Format: "请求超时"}
 	Unavailable         = ErrorCode{Code: 503, Format: "服务不可用"}
+	TaskNotFound        = ErrorCode{Code: 1404, Format: "任务不存在或已过期"}
 	ParamIsBlank_       = ErrorCode{Code: 1001, Format: "参数%s不能为空"}
 	DbFindError_        = ErrorCode{Code: 1002, Format: "数据库查询出错：%s"}
 	ConvertError_       = ErrorCode{Code: 1003, Format: "数据转换出错:%s"}

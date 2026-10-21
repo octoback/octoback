@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net"
 	"path"
 	"strconv"
@@ -42,7 +43,6 @@ type SshAccess struct {
 	JumpAccessId       int
 	client             *ssh.Client
 }
-
 
 func (s *SshAccess) ExecuteAction(ctx context.Context, action string, params map[string]any) (any, error) {
 	if action == "onTest" {
@@ -147,6 +147,15 @@ func (c *SshAccess) Upload(ctx context.Context, remotePath string, data []byte, 
 }
 
 func (c *SshAccess) Execute(ctx context.Context, command string) ([]byte, error) {
+	return c.execute(ctx, command, nil)
+}
+
+// ExecuteWithInput 执行远程命令并通过 SSH 会话标准输入传递数据。
+func (c *SshAccess) ExecuteWithInput(ctx context.Context, command string, input []byte) ([]byte, error) {
+	return c.execute(ctx, command, bytes.NewReader(input))
+}
+
+func (c *SshAccess) execute(ctx context.Context, command string, input io.Reader) ([]byte, error) {
 	if c == nil || c.client == nil {
 		return nil, error_.NewTextError("SSH 尚未连接")
 	}
@@ -155,6 +164,7 @@ func (c *SshAccess) Execute(ctx context.Context, command string) ([]byte, error)
 		return nil, error_.NewWrapError("创建 SSH 执行会话失败", err)
 	}
 	defer session.Close()
+	session.Stdin = input
 	log_.Logger.Info("发送 SSH 远程命令", zap.String("command", command))
 	var stdout, stderr bytes.Buffer
 	session.Stdout, session.Stderr = &stdout, &stderr

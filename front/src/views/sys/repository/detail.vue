@@ -9,7 +9,7 @@
           <a-tooltip title="校验仓库数据完整性，不会修改仓库内容">
             <a-button type="primary" :loading="actionLoading" @click="checkRepository">检查</a-button>
           </a-tooltip>
-          <a-tooltip title="重新查询仓库快照和统计数据，并更新本地缓存"> </a-tooltip>
+          <a-button :loading="loading" @click="loadSnapshots(true)">刷新快照</a-button>
         </a-space>
       </template>
     </a-page-header>
@@ -55,7 +55,6 @@
               </div>
               <a-space>
                 <a-tag color="green">已保存</a-tag>
-                <a-button type="primary" :loading="snapshotRefreshing" @click="refreshSelectedSnapshot">刷新</a-button>
                 <a-button danger :loading="snapshotDeleting" @click="deleteSelectedSnapshot">删除快照</a-button>
               </a-space>
             </div>
@@ -77,23 +76,24 @@
                   <span>标签</span><strong>{{ formatTags(selectedSnapshot.tags) }}</strong>
                 </div>
               </div>
-              <div v-if="snapshotStatsEntries.length" class="summary-grid snapshot-stats-grid">
-                <div v-for="entry in snapshotStatsEntries" :key="entry.key" class="summary-item">
-                  <span>{{ entry.label }}</span>
-                  <strong>{{ entry.value }}</strong>
+              <a-spin :spinning="selectedSnapshotStatsLoading">
+                <div v-if="snapshotStatsEntries.length" class="summary-grid snapshot-stats-grid">
+                  <div v-for="entry in snapshotStatsEntries" :key="entry.key" class="summary-item">
+                    <span>{{ entry.label }}</span>
+                    <strong>{{ entry.value }}</strong>
+                  </div>
                 </div>
-              </div>
-              <a-empty v-else description="暂无快照统计" />
+                <a-empty v-else-if="!selectedSnapshotStatsLoading" description="暂无快照统计" />
+              </a-spin>
             </div>
-            <div class="summary-section">
+            <div v-if="snapshotSummaryEntries.length" class="summary-section">
               <div class="section-title">备份 Summary</div>
-              <div v-if="snapshotSummaryEntries.length" class="summary-grid">
+              <div class="summary-grid">
                 <div v-for="entry in snapshotSummaryEntries" :key="entry.key" class="summary-item">
                   <span>{{ entry.label }}</span>
                   <strong>{{ entry.value }}</strong>
                 </div>
               </div>
-              <a-empty v-else description="暂无备份 Summary" />
             </div>
             <div class="paths-section">
               <div class="mb-2">
@@ -147,7 +147,6 @@ import {
   getPluginInstanceInfo,
   getPluginInstanceSnapshotBrowser,
   getPluginInstanceSnapshots,
-  getPluginInstanceStats,
   getPluginInstanceSnapshotStats,
   refreshPluginInstanceRepositoryData,
   forgetPluginInstanceSnapshot
@@ -181,7 +180,7 @@ const errorMessage = ref("");
 const repositoryName = ref("");
 const snapshots = ref<Snapshot[]>([]);
 const selectedSnapshot = ref<Snapshot>();
-const statsLoading = ref(false);
+const snapshotStatsLoadingIds = ref<string[]>([]);
 const repositoryStats = ref<{ total_size?: number; total_file_count?: number; snapshot_count?: number }>();
 const repositoryTitle = computed(() => (repositoryName.value ? `${repositoryName.value}` : "仓库详情"));
 const browserLoading = ref(false);
@@ -189,7 +188,6 @@ const browserEntries = ref<BrowserEntry[]>([]);
 const browserLoaded = ref(false);
 const actionLoading = ref(false);
 const snapshotDeleting = ref(false);
-const snapshotRefreshing = ref(false);
 const restoreVisible = ref(false);
 const restoreLoading = ref(false);
 const selectedPaths = ref<string[]>([]);
@@ -197,6 +195,9 @@ const selectedBackupPaths = ref<string[]>([]);
 const restorePaths = computed(() => compactRestorePaths([...selectedBackupPaths.value, ...selectedPaths.value]));
 const restoreForm = ref({ targetAccessId: 0, targetPath: [] as string[] });
 const restorePathIsEmpty = ref<boolean | undefined>();
+const selectedSnapshotStatsLoading = computed(() => {
+  return selectedSnapshot.value !== undefined && snapshotStatsLoadingIds.value.includes(selectedSnapshot.value.id);
+});
 const snapshotStatsEntries = computed(() => {
   const stats = selectedSnapshot.value?.stats;
   if (!stats || typeof stats !== "object" || Array.isArray(stats)) {
@@ -311,7 +312,7 @@ function formatBytes(value?: number) {
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KiB`;
   return `${(value / 1024 / 1024).toFixed(2)} MiB`;
 }
-async function selectSnapshot(snapshot: Snapshot) {
+async function selectSnapshot(snapshot: Snapshot, fetchMissingStats = true) {
   selectedSnapshot.value = snapshot;
   browserLoading.value = true;
   browserEntries.value = [];
@@ -319,6 +320,35 @@ async function selectSnapshot(snapshot: Snapshot) {
   selectedPaths.value = [];
   selectedBackupPaths.value = [];
   browserLoading.value = false;
+  if (fetchMissingStats) {
+    await loadSnapshotStats(snapshot);
+  }
+}
+async function loadSnapshotStats(snapshot: Snapshot) {
+  if (snapshot.stats && Object.keys(snapshot.stats).length > 0) {
+    return;
+  }
+  if (snapshotStatsLoadingIds.value.includes(snapshot.id)) {
+    return;
+  }
+  snapshotStatsLoadingIds.value = [...snapshotStatsLoadingIds.value, snapshot.id];
+  try {
+    const stats = await getPluginInstanceSnapshotStats(String(route.params.id), snapshot.id);
+    const updatedSnapshot = { ...snapshot, stats };
+    const index = snapshots.value.findIndex((item) => item.id === snapshot.id);
+    if (index >= 0) {
+      snapshots.value[index] = updatedSnapshot;
+    }
+    if (selectedSnapshot.value?.id === snapshot.id) {
+      selectedSnapshot.value = updatedSnapshot;
+    }
+  } catch (error: any) {
+    if (selectedSnapshot.value?.id === snapshot.id) {
+      message.error(error?.message || "加载快照统计失败");
+    }
+  } finally {
+    snapshotStatsLoadingIds.value = snapshotStatsLoadingIds.value.filter((id) => id !== snapshot.id);
+  }
 }
 async function submitRestore() {
   if (!selectedSnapshot.value || !restoreForm.value.targetAccessId || restoreForm.value.targetPath.length !== 1) {
@@ -345,25 +375,6 @@ async function submitRestore() {
     message.error(error?.message || "创建恢复任务失败");
   } finally {
     restoreLoading.value = false;
-  }
-}
-async function refreshSelectedSnapshot() {
-  if (!selectedSnapshot.value) {
-    return;
-  }
-  snapshotRefreshing.value = true;
-  try {
-    const stats = await getPluginInstanceSnapshotStats(String(route.params.id), selectedSnapshot.value.id);
-    selectedSnapshot.value = { ...selectedSnapshot.value, stats };
-    const index = snapshots.value.findIndex((snapshot) => snapshot.id === selectedSnapshot.value?.id);
-    if (index >= 0) {
-      snapshots.value[index] = selectedSnapshot.value;
-    }
-    message.success("快照统计已刷新");
-  } catch (error: any) {
-    message.error(error?.message || "刷新快照统计失败");
-  } finally {
-    snapshotRefreshing.value = false;
   }
 }
 function deleteSelectedSnapshot() {
@@ -414,13 +425,10 @@ async function loadBrowserNode() {
 }
 async function loadSnapshots(refresh = false) {
   loading.value = true;
-  statsLoading.value = true;
   errorMessage.value = "";
   try {
     const infoPromise = getPluginInstanceInfo(String(route.params.id));
-    const detailPromise = refresh
-      ? refreshPluginInstanceRepositoryData(String(route.params.id))
-      : Promise.all([getPluginInstanceSnapshots(String(route.params.id)), getPluginInstanceStats(String(route.params.id))]).then(([result, stats]) => ({ snapshots: result, stats }));
+    const detailPromise = refresh ? refreshPluginInstanceRepositoryData(String(route.params.id)) : getPluginInstanceSnapshots(String(route.params.id));
     const [info, detail] = await Promise.all([infoPromise, detailPromise]);
     repositoryName.value = info.name;
     snapshots.value = Array.isArray(detail?.snapshots) ? [...detail.snapshots].sort((left, right) => String(right.time || "").localeCompare(String(left.time || ""))) : [];
@@ -428,13 +436,12 @@ async function loadSnapshots(refresh = false) {
     browserEntries.value = [];
     browserLoaded.value = false;
     if (snapshots.value[0]) {
-      await selectSnapshot(snapshots.value[0]);
+      await selectSnapshot(snapshots.value[0], false);
     }
   } catch (error: any) {
     errorMessage.value = error?.message || "加载仓库快照失败";
   } finally {
     loading.value = false;
-    statsLoading.value = false;
   }
 }
 onMounted(loadSnapshots);

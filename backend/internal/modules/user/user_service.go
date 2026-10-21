@@ -43,10 +43,10 @@ type UserPageQuery struct {
 }
 
 type UserPageResult struct {
-	Offset  int64          `json:"offset"`
-	Limit   int64          `json:"limit"`
-	Records []*models.User `json:"records"`
-	Total   int64          `json:"total"`
+	Offset  int64             `json:"offset"`
+	Limit   int64             `json:"limit"`
+	Records []*models.SysUser `json:"records"`
+	Total   int64             `json:"total"`
 }
 
 type UserService struct {
@@ -58,7 +58,7 @@ func NewUserService(ctx context.Context, svcCtx *svc.ServiceContext) *UserServic
 	return &UserService{ctx: ctx, svcCtx: svcCtx}
 }
 
-func (l *UserService) Create(in *CreateUserInput) (*models.User, error) {
+func (l *UserService) Create(in *CreateUserInput) (*models.SysUser, error) {
 	role := web_.RoleRead
 	if in != nil && strings.TrimSpace(in.Role) != "" {
 		role = strings.TrimSpace(in.Role)
@@ -66,9 +66,9 @@ func (l *UserService) Create(in *CreateUserInput) (*models.User, error) {
 	return l.create(in, role)
 }
 
-func (l *UserService) Register(in *CreateUserInput) (*models.User, error) {
-	dao := db_.New[models.User](db_.NewCtx(l.ctx, l.svcCtx.Db))
-	count, err := dao.Count(&models.User{})
+func (l *UserService) Register(in *CreateUserInput) (*models.SysUser, error) {
+	dao := db_.New[models.SysUser](db_.NewCtx(l.ctx, l.svcCtx.Db))
+	count, err := dao.Count(&models.SysUser{})
 	if err != nil {
 		return nil, err
 	}
@@ -79,16 +79,16 @@ func (l *UserService) Register(in *CreateUserInput) (*models.User, error) {
 	return l.create(in, role)
 }
 
-func (l *UserService) create(in *CreateUserInput, role string) (*models.User, error) {
+func (l *UserService) create(in *CreateUserInput, role string) (*models.SysUser, error) {
 	if in == nil || strings.TrimSpace(in.Username) == "" || strings.TrimSpace(in.Password) == "" {
 		return nil, error_.NewWrapError("创建用户失败：用户名和密码不能为空", ErrInvalidUser)
 	}
 	if !web_.ValidRole(role) {
 		return nil, error_.NewWrapError("用户角色无效", ErrInvalidUser)
 	}
-	dao := db_.New[models.User](db_.NewCtx(l.ctx, l.svcCtx.Db))
+	dao := db_.New[models.SysUser](db_.NewCtx(l.ctx, l.svcCtx.Db))
 	username := strings.TrimSpace(in.Username)
-	existing, err := dao.FindOne(&models.User{Username: username})
+	existing, err := dao.FindOne(&models.SysUser{Username: username})
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func (l *UserService) create(in *CreateUserInput, role string) (*models.User, er
 		return nil, ErrUsernameExists
 	}
 
-	user := &models.User{Username: username, NickName: strings.TrimSpace(in.NickName), Role: role}
+	user := &models.SysUser{Username: username, NickName: strings.TrimSpace(in.NickName), Role: role}
 	if user.NickName == "" {
 		user.NickName = username
 	}
@@ -109,12 +109,12 @@ func (l *UserService) create(in *CreateUserInput, role string) (*models.User, er
 	return user, nil
 }
 
-func (l *UserService) Login(in *LoginInput) (*models.User, error) {
+func (l *UserService) Login(in *LoginInput) (*models.SysUser, error) {
 	if in == nil || strings.TrimSpace(in.Username) == "" || strings.TrimSpace(in.Password) == "" {
 		return nil, ErrInvalidLogin
 	}
-	dao := db_.New[models.User](db_.NewCtx(l.ctx, l.svcCtx.Db))
-	user, err := dao.FindOne(&models.User{Username: strings.TrimSpace(in.Username)})
+	dao := db_.New[models.SysUser](db_.NewCtx(l.ctx, l.svcCtx.Db))
+	user, err := dao.FindOne(&models.SysUser{Username: strings.TrimSpace(in.Username)})
 	if err != nil {
 		return nil, err
 	}
@@ -124,9 +124,9 @@ func (l *UserService) Login(in *LoginInput) (*models.User, error) {
 	return user, nil
 }
 
-func (l *UserService) List() ([]*models.User, error) {
-	dao := db_.New[models.User](db_.NewCtx(l.ctx, l.svcCtx.Db))
-	return dao.FindList(&models.User{}, nil)
+func (l *UserService) List() ([]*models.SysUser, error) {
+	dao := db_.New[models.SysUser](db_.NewCtx(l.ctx, l.svcCtx.Db))
+	return dao.FindList(&models.SysUser{}, nil)
 }
 
 func (l *UserService) FindPage(query *UserPageQuery) (*UserPageResult, error) {
@@ -143,21 +143,21 @@ func (l *UserService) FindPage(query *UserPageQuery) (*UserPageResult, error) {
 	if limit > 1000 {
 		limit = 1000
 	}
-	dao := db_.New[models.User](db_.NewCtx(l.ctx, l.svcCtx.Db))
+	dao := db_.New[models.SysUser](db_.NewCtx(l.ctx, l.svcCtx.Db))
 	page := &db_.Page{Start: offset, Limit: limit}
-	rows, err := dao.FindPage(&db_.PageReq[models.User]{Query: &models.User{}, Page: page})
+	rows, err := dao.FindPage(&db_.PageReq[models.SysUser]{Query: &models.SysUser{}, Page: page})
 	if err != nil {
 		return nil, err
 	}
-	records := make([]*models.User, 0, len(*rows))
+	records := make([]*models.SysUser, 0, len(*rows))
 	for i := range *rows {
 		records = append(records, &(*rows)[i])
 	}
 	return &UserPageResult{Offset: offset, Limit: limit, Records: records, Total: page.Total}, nil
 }
 
-func (l *UserService) Get(id int64) (*models.User, error) {
-	dao := db_.New[models.User](db_.NewCtx(l.ctx, l.svcCtx.Db))
+func (l *UserService) Get(id int64) (*models.SysUser, error) {
+	dao := db_.New[models.SysUser](db_.NewCtx(l.ctx, l.svcCtx.Db))
 	user, err := dao.GetById(id)
 	if err != nil {
 		return nil, err
@@ -168,7 +168,7 @@ func (l *UserService) Get(id int64) (*models.User, error) {
 	return user, nil
 }
 
-func (l *UserService) Update(id int64, in *UpdateUserInput) (*models.User, error) {
+func (l *UserService) Update(id int64, in *UpdateUserInput) (*models.SysUser, error) {
 	if in == nil {
 		return nil, error_.NewWrapError("更新用户失败：请求体不能为空", ErrInvalidUser)
 	}
@@ -182,8 +182,8 @@ func (l *UserService) Update(id int64, in *UpdateUserInput) (*models.User, error
 			return nil, error_.NewWrapError("更新用户失败：用户名不能为空", ErrInvalidUser)
 		}
 		if username != user.Username {
-			dao := db_.New[models.User](db_.NewCtx(l.ctx, l.svcCtx.Db))
-			existing, err := dao.FindOne(&models.User{Username: username})
+			dao := db_.New[models.SysUser](db_.NewCtx(l.ctx, l.svcCtx.Db))
+			existing, err := dao.FindOne(&models.SysUser{Username: username})
 			if err != nil {
 				return nil, err
 			}
@@ -211,7 +211,7 @@ func (l *UserService) Update(id int64, in *UpdateUserInput) (*models.User, error
 		}
 		user.Role = role
 	}
-	dao := db_.New[models.User](db_.NewCtx(l.ctx, l.svcCtx.Db))
+	dao := db_.New[models.SysUser](db_.NewCtx(l.ctx, l.svcCtx.Db))
 	if _, err := dao.UpdateById(id, user); err != nil {
 		return nil, err
 	}
@@ -222,7 +222,7 @@ func (l *UserService) Delete(id int64) error {
 	if _, err := l.Get(id); err != nil {
 		return err
 	}
-	dao := db_.New[models.User](db_.NewCtx(l.ctx, l.svcCtx.Db))
+	dao := db_.New[models.SysUser](db_.NewCtx(l.ctx, l.svcCtx.Db))
 	_, err := dao.Delete(&id)
 	return err
 }

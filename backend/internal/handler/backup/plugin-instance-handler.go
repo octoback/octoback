@@ -1,4 +1,4 @@
-package sys
+package backup
 
 import (
 	"fmt"
@@ -12,6 +12,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+// RegisterPlugin 注册插件 metadata 和实例管理接口。
 func RegisterPlugin(app *fiber.App, s *svc.ServiceContext) {
 	r := app.Group("/api/plugin")
 	web_.RegisterRoutes(r, s.Auth,
@@ -21,105 +22,12 @@ func RegisterPlugin(app *fiber.App, s *svc.ServiceContext) {
 	web_.RegisterRoutes(instances, s.Auth,
 		web_.Route{Path: "/page", Permission: web_.Read, Handler: web_.HandleJSON(pluginInstancePage(s))},
 		web_.Route{Path: "/info", Permission: web_.Read, Handler: web_.Handle(pluginInstanceInfo(s))},
-		web_.Route{Path: "/snapshots", Permission: web_.Read, Handler: web_.Handle(pluginInstanceSnapshots(s))},
-		web_.Route{Path: "/stats", Permission: web_.Read, Handler: web_.Handle(pluginInstanceStats(s))},
-		web_.Route{Path: "/snapshot-stats", Permission: web_.Read, Handler: web_.Handle(pluginInstanceSnapshotStats(s))},
-		web_.Route{Path: "/refresh-repository-data", Permission: web_.Write, Handler: web_.Handle(pluginInstanceRefreshRepositoryData(s))},
-		web_.Route{Path: "/check", Permission: web_.Write, Handler: web_.Handle(pluginInstanceCheck(s))},
-		web_.Route{Path: "/snapshot-browser", Permission: web_.Read, Handler: web_.Handle(pluginInstanceSnapshotBrowser(s))},
-		web_.Route{Path: "/forget-snapshot", Permission: web_.Write, Handler: web_.Handle(pluginInstanceForgetSnapshot(s))},
 		web_.Route{Path: "/simpleByIds", Permission: web_.Read, Handler: web_.HandleJSON(pluginInstanceSimpleByIDs(s))},
 		web_.Route{Path: "/create", Permission: web_.Write, Handler: web_.HandleJSON(pluginInstanceCreate(s))},
 		web_.Route{Path: "/update", Permission: web_.Write, Handler: web_.HandleJSON(pluginInstanceUpdate(s))},
 		web_.Route{Path: "/action", Permission: web_.Write, Handler: web_.HandleJSON(pluginInstanceAction(s))},
 		web_.Route{Path: "/delete", Permission: web_.Admin, Handler: web_.Handle(pluginInstanceDelete(s))},
 	)
-}
-func pluginInstanceSnapshotStats(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
-		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
-		if err != nil {
-			return nil, error_.NewCodeTextError(code_.ParamError, "插件 Id 无效")
-		}
-		snapshotId := c.Query("snapshotId")
-		return logic.NewPluginInstanceService(c.Context(), s).SnapshotStats(id, snapshotId)
-	}
-}
-func pluginInstanceRefreshRepositoryData(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
-		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
-		if err != nil {
-			return nil, error_.NewCodeTextError(code_.ParamError, "插件 Id 无效")
-		}
-		return logic.NewPluginInstanceService(c.Context(), s).RefreshRepositoryData(id, nil)
-	}
-}
-func pluginInstanceSnapshots(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
-		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
-		if err != nil {
-			return nil, error_.NewCodeTextError(code_.ParamError, "插件 Id 无效")
-		}
-		return logic.NewPluginInstanceService(c.Context(), s).Snapshots(id)
-	}
-}
-func pluginInstanceStats(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
-		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
-		if err != nil {
-			return nil, error_.NewCodeTextError(code_.ParamError, "插件 Id 无效")
-		}
-		return logic.NewPluginInstanceService(c.Context(), s).RepositoryStats(id)
-	}
-}
-func pluginInstanceCheck(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
-		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
-		if err != nil {
-			return nil, error_.NewCodeTextError(code_.ParamError, "插件 Id 无效")
-		}
-		if err := logic.NewPluginInstanceService(c.Context(), s).CheckRepository(id); err != nil {
-			return nil, err
-		}
-		return fiber.Map{}, nil
-	}
-}
-func pluginInstanceSnapshotBrowser(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
-		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
-		if err != nil {
-			return nil, error_.NewCodeTextError(code_.ParamError, "插件 Id 无效")
-		}
-		snapshotId := c.Query("snapshotId")
-		if snapshotId == "" {
-			return nil, error_.NewCodeTextError(code_.ParamError, "快照 Id 不能为空")
-		}
-		return logic.NewPluginInstanceService(c.Context(), s).SnapshotBrowser(id, snapshotId)
-	}
-}
-
-// pluginInstanceForgetSnapshot godoc
-// @Summary 删除仓库中的指定快照
-// @Tags 插件
-// @Accept json
-// @Produce json
-// @Security bearerAuth
-// @Param id query int64 true "仓库插件实例 Id"
-// @Param snapshotId query string true "Restic 快照 Id"
-// @Success 200 {object} map[string]interface{}
-// @Router /api/plugin/instance/forget-snapshot [post]
-func pluginInstanceForgetSnapshot(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
-		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
-		if err != nil {
-			return nil, error_.NewCodeTextError(code_.ParamError, "插件 Id 无效")
-		}
-		snapshotId := c.Query("snapshotId")
-		if err := logic.NewPluginInstanceService(c.Context(), s).ForgetSnapshot(id, snapshotId); err != nil {
-			return nil, err
-		}
-		return fiber.Map{}, nil
-	}
 }
 
 // pluginInstanceInfo godoc

@@ -2,12 +2,13 @@ package models
 
 import "handfree-work/octo-backup/internal/base/db_"
 
-type BackupLog struct {
+// BackupTask 保存一次备份任务及其执行状态。
+type BackupTask struct {
 	db_.BaseModel
 	PlanId       int64   `json:"planId" gorm:"not null;index"`
 	SourceId     *int64  `json:"sourceId" gorm:"index"`
-	RepositoryId *int64  `json:"repositoryId" gorm:"index:idx_backup_log_repo_snapshot"`
-	SnapshotId   *string `json:"snapshotId" gorm:"size:128;index:idx_backup_log_repo_snapshot"`
+	RepositoryId *int64  `json:"repositoryId" gorm:"index:idx_backup_task_repo_snapshot"`
+	SnapshotId   *string `json:"snapshotId" gorm:"size:128;index:idx_backup_task_repo_snapshot"`
 	Status       string  `json:"status" gorm:"size:30;not null;index"`
 	Progress     int     `json:"progress" gorm:"not null;default:0"`
 	Stage        string  `json:"stage" gorm:"size:100"`
@@ -19,4 +20,4 @@ type BackupLog struct {
 	FinishedAt   *int64  `json:"finishedAt"`
 }
 
-func (BackupLog) TableName() string { return "backup_log" }
+func (BackupTask) TableName() string { return "backup_task" }

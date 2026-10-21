@@ -19,8 +19,16 @@ func TestRepositorySftpCommandSelectsConfiguredPrivateKey(t *testing.T) {
 	}
 
 	command := repositorySftpCommand(&config)
-	if !strings.Contains(command, "-i '.ssh/key_17'") {
-		t.Fatalf("SFTP command = %q, want the key for access 17", command)
+	if strings.Contains(command, "-i ") || strings.Contains(command, "IdentitiesOnly") {
+		t.Fatalf("SFTP command = %q, want agent-based authentication", command)
+	}
+}
+
+func TestRepositorySftpCommandLoadsAgentForPassphraseKey(t *testing.T) {
+	config := ClientConfig{RepositoryAccessId: 17, RepositoryAccess: &sshaccess.SshAccess{Host: "repo.example.com", Port: 22, Username: "backup", PrivateKey: "key", PrivateKeyPassword: "pass"}}
+	command := repositorySftpCommand(&config)
+	if !strings.Contains(command, ". './.ssh/agent_17.env';") {
+		t.Fatalf("SFTP command = %q, want persisted agent environment", command)
 	}
 }
 

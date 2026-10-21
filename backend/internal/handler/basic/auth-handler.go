@@ -24,13 +24,17 @@ func RegisterAuth(app *fiber.App, svcCtx *svc.ServiceContext) {
 // @Accept json
 // @Produce json
 // @Param request body logic.CreateUserInput true "注册信息"
-// @Success 201 {object} UserResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 409 {object} ErrorResponse
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 409 {object} map[string]interface{}
 // @Router /api/auth/register [post]
 func registerUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.CreateUserInput) (any, error) {
 	return func(c fiber.Ctx, input *logic.CreateUserInput) (any, error) {
 		defer web_.AuditLog(c, "注册用户")
+		if true {
+			//当前禁止注册用户
+			return nil, error_.NewTextError("当前系统已禁用用户注册功能")
+		}
 		return logic.NewUserService(c.Context(), svcCtx).Register(input)
 	}
 }
@@ -42,11 +46,10 @@ func registerUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.CreateUserI
 // @Accept json
 // @Produce json
 // @Param request body logic.LoginInput true "登录信息"
-// @Success 200 {object} LoginResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 401 {object} ErrorResponse
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
 // @Router /api/auth/login [post]
-
 func loginUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.LoginInput) (any, error) {
 	return func(c fiber.Ctx, input *logic.LoginInput) (any, error) {
 		if input != nil {

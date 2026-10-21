@@ -6,7 +6,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-type User struct {
+// SysUser 保存系统用户的账号、认证和权限信息。
+type SysUser struct {
 	db_.BaseModel
 	db_.LogicDelete
 	AppKey       string `json:"appKey" gorm:"size:100;comment:应用Key;index"`
@@ -24,11 +25,11 @@ type User struct {
 	InviteUserId int64  `json:"inviteUserId" gorm:"comment:邀请人id"`
 }
 
-func (u *User) NewUser(id *int64) *User {
-	return &User{BaseModel: db_.NewBaseModel(id)}
-}
+// TableName 返回系统用户表名。
+func (SysUser) TableName() string { return "sys_user" }
 
-func (u *User) EncryptPassword(password string) error {
+// EncryptPassword 使用 bcrypt 保存密码摘要，不保留明文密码。
+func (u *SysUser) EncryptPassword(password string) error {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
@@ -37,6 +38,7 @@ func (u *User) EncryptPassword(password string) error {
 	return nil
 }
 
-func (u *User) CheckPassword(password string) error {
+// CheckPassword 校验输入密码与已保存的 bcrypt 摘要是否匹配。
+func (u *SysUser) CheckPassword(password string) error {
 	return bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password))
 }

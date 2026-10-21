@@ -10,7 +10,7 @@ import { useFs } from "@fast-crud/fast-crud";
 import createCrudOptions from "./crud";
 const { crudBinding, crudRef, crudExpose } = useFs({ createCrudOptions });
 onMounted(() => crudExpose.doRefresh());
-defineOptions({ name: "BackupLog" });
+defineOptions({ name: "BackupTask" });
 </script>
 <style lang="less">
 .backup-log-page {

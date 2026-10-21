@@ -2,9 +2,7 @@ import { CreateCrudOptionsRet, dict } from "@fast-crud/fast-crud";
 import { Modal } from "ant-design-vue";
 import { h } from "vue";
 import { getBackupPlanList } from "../api";
-import { getBackupRunLog, getBackupRunPage, type BackupLog, type BackupRunLogDetail } from "../api";
-
-const logLevelPattern = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \[(INFO|WARN|ERROR)\] (.*)$/;
+import { getBackupRunLog, getBackupRunPage, type BackupTask, type BackupRunLogDetail } from "../api";
 
 function formatSummaryDate(value: string) {
   const date = new Date(value);
@@ -83,14 +81,12 @@ function renderSummary(summary: Record<string, unknown>) {
   );
 }
 
-function renderLogContent(content: string) {
-  return content.split("\n").map((line, index) => {
-    const match = logLevelPattern.exec(line);
-    if (!match) {
-      return h("div", { key: index, class: "backup-log-line backup-log-line-plain" }, line || " ");
-    }
-    const [, timestamp, level, message] = match;
-    return h("div", { key: index, class: `backup-log-line backup-log-level-${level.toLowerCase()}` }, [
+function renderLogContent(logs: Array<{ id: number; level: string; message: string; createdAt: number }>) {
+  return logs.map((log) => {
+    const level = log.level || "INFO";
+    const timestamp = new Date(log.createdAt).toLocaleString("zh-CN", { hour12: false });
+    const message = log.message;
+    return h("div", { key: log.id, class: `backup-log-line backup-log-level-${level.toLowerCase()}` }, [
       h("span", { class: "backup-log-time" }, timestamp),
       h("span", { class: "backup-log-level" }, level),
       h("span", { class: "backup-log-message" }, message)
@@ -98,16 +94,16 @@ function renderLogContent(content: string) {
   });
 }
 
-export default function (): CreateCrudOptionsRet<BackupLog> {
-  const openRepository = (row: BackupLog) => {
+export default function (): CreateCrudOptionsRet<BackupTask> {
+  const openRepository = (row: BackupTask) => {
     if (row.repositoryId) {
       window.location.hash = `#/sys/repository/${row.repositoryId}`;
     }
   };
-  const loadLogDetail = async (row: BackupLog) => {
+  const loadLogDetail = async (row: BackupTask) => {
     return (await getBackupRunLog(row.id)) as BackupRunLogDetail;
   };
-  const openSummary = async (row: BackupLog) => {
+  const openSummary = async (row: BackupTask) => {
     const response = await loadLogDetail(row);
     const summary = response.summary || {};
     Modal.info({
@@ -117,14 +113,14 @@ export default function (): CreateCrudOptionsRet<BackupLog> {
       content: () => h("div", { class: "backup-log-summary-dialog" }, [h("div", { class: "backup-log-summary-title" }, "Restic Summary"), renderSummary(summary)])
     });
   };
-  const openResticLog = async (row: BackupLog) => {
+  const openResticLog = async (row: BackupTask) => {
     const response = await loadLogDetail(row);
-    const content = response.content || "暂无备份执行日志";
+    const logs = response.logs || [];
     Modal.info({
       title: `执行日志 - ${row.planName || `运行记录 ${row.id}`}`,
       width: 980,
       wrapClassName: "backup-log-modal",
-      content: () => h("div", { class: "backup-log-modal-content" }, [h("div", { class: "backup-log-terminal" }, renderLogContent(content))])
+      content: () => h("div", { class: "backup-log-modal-content" }, [h("div", { class: "backup-log-terminal" }, logs.length ? renderLogContent(logs) : "暂无备份执行日志")])
     });
   };
   const statusDict = dict({
@@ -160,7 +156,7 @@ export default function (): CreateCrudOptionsRet<BackupLog> {
             title: "查看备份仓库文件",
             type: "link",
             icon: "ion:folder-open-outline",
-            click: ({ row }: { row: BackupLog }) => openRepository(row)
+            click: ({ row }: { row: BackupTask }) => openRepository(row)
           },
           summary: {
             show: true,
@@ -168,7 +164,7 @@ export default function (): CreateCrudOptionsRet<BackupLog> {
             title: "查看备份 Summary",
             type: "link",
             icon: "ion:stats-chart-outline",
-            click: ({ row }: { row: BackupLog }) => openSummary(row)
+            click: ({ row }: { row: BackupTask }) => openSummary(row)
           },
           log: {
             show: true,
@@ -176,7 +172,7 @@ export default function (): CreateCrudOptionsRet<BackupLog> {
             title: "查看 Restic 日志",
             type: "link",
             icon: "ion:document-text-outline",
-            click: ({ row }: { row: BackupLog }) => openResticLog(row)
+            click: ({ row }: { row: BackupTask }) => openResticLog(row)
           }
         }
       },

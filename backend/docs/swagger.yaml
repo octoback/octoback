@@ -1,5 +1,29 @@
 basePath: /
 definitions:
+  audit.AuditLogPageQuery:
+    properties:
+      limit:
+        type: integer
+      offset:
+        type: integer
+      path:
+        type: string
+      username:
+        type: string
+    type: object
+  audit.AuditLogPageResult:
+    properties:
+      limit:
+        type: integer
+      offset:
+        type: integer
+      records:
+        items:
+          $ref: '#/definitions/models.AuditLog'
+        type: array
+      total:
+        type: integer
+    type: object
   logic.CreateUserInput:
     properties:
       nickName:
@@ -29,26 +53,36 @@ definitions:
       username:
         type: string
     type: object
-  user.ErrorResponse:
+  models.AuditLog:
+    properties:
+      createdAt:
+        type: integer
+      duration:
+        type: integer
+      id:
+        type: integer
+      ip:
+        type: string
+      method:
+        type: string
+      operation:
+        type: string
+      path:
+        type: string
+      status:
+        type: integer
+      userId:
+        type: integer
+      username:
+        type: string
+    type: object
+  sys.ErrorResponse:
     properties:
       error:
         example: 没有访问权限
         type: string
     type: object
-  user.LoginResponse:
-    properties:
-      data:
-        properties:
-          expiresAt:
-            type: integer
-          token:
-            type: string
-          user:
-            additionalProperties: {}
-            type: object
-        type: object
-    type: object
-  user.UserListResponse:
+  sys.UserListResponse:
     properties:
       data:
         properties:
@@ -59,11 +93,18 @@ definitions:
             type: array
         type: object
     type: object
-  user.UserResponse:
+  sys.UserResponse:
     properties:
       data:
         additionalProperties: {}
         type: object
+    type: object
+  sys.batchDeleteInput:
+    properties:
+      ids:
+        items:
+          type: integer
+        type: array
     type: object
 info:
   contact: {}
@@ -71,6 +112,30 @@ info:
   title: OctoBackup API
   version: "1.0"
 paths:
+  /api/audit/page:
+    post:
+      consumes:
+      - application/json
+      description: 查询当前系统中的用户写操作和认证结果审计记录。
+      parameters:
+      - description: 分页和筛选条件
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/audit.AuditLogPageQuery'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/audit.AuditLogPageResult'
+      security:
+      - bearerAuth: []
+      summary: 查询审计日志
+      tags:
+      - 审计
   /api/auth/login:
     post:
       consumes:
@@ -89,15 +154,18 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/user.LoginResponse'
+            additionalProperties: true
+            type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/user.ErrorResponse'
+            additionalProperties: true
+            type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/user.ErrorResponse'
+            additionalProperties: true
+            type: object
       summary: 用户登录
       tags:
       - 认证
@@ -119,59 +187,29 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/user.UserResponse'
+            additionalProperties: true
+            type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/user.ErrorResponse'
+            additionalProperties: true
+            type: object
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/user.ErrorResponse'
+            additionalProperties: true
+            type: object
       summary: 注册用户
       tags:
       - 认证
-  /api/users/{id}/delete:
+  /api/plan/run/log:
     post:
-      description: 需要 admin 权限。
-      parameters:
-      - description: 用户 ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
+      consumes:
       - application/json
-      responses:
-        "204":
-          description: No Content
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/user.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/user.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/user.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/user.ErrorResponse'
-      security:
-      - bearerAuth: []
-      summary: 删除用户
-      tags:
-      - 用户
-  /api/users/{id}/detail:
-    post:
-      description: 需要 read、write 或 admin 权限。
+      description: 返回全量可读执行日志以及解析后的 Restic summary 对象。
       parameters:
-      - description: 用户 ID
-        in: path
+      - description: 运行记录 Id
+        in: query
         name: id
         required: true
         type: integer
@@ -181,74 +219,201 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/user.UserResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/user.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/user.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/user.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/user.ErrorResponse'
-      security:
-      - bearerAuth: []
-      summary: 获取用户详情
+            additionalProperties: true
+            type: object
+      summary: 查询备份日志详情
       tags:
-      - 用户
-  /api/users/{id}/update:
+      - 备份计划
+  /api/plugin/instance/forget-snapshot:
     post:
       consumes:
       - application/json
-      description: 需要 write 或 admin 权限；非管理员只能更新自己的资料且不能修改角色。
       parameters:
-      - description: 用户 ID
-        in: path
+      - description: 仓库插件实例 Id
+        in: query
         name: id
         required: true
         type: integer
-      - description: 更新信息
+      - description: Restic 快照 Id
+        in: query
+        name: snapshotId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - bearerAuth: []
+      summary: 删除仓库中的指定快照
+      tags:
+      - 插件
+  /api/plugin/instance/info:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 插件 Id
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - bearerAuth: []
+      summary: 获取插件实例详情
+      tags:
+      - 插件
+  /api/plugin/instance/refresh-repository-data:
+    post:
+      consumes:
+      - application/json
+      description: 查询 Restic 快照和仓库统计并写入 repository_info，不查询备份 Summary。
+      parameters:
+      - description: 仓库插件实例 Id
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - bearerAuth: []
+      summary: 刷新仓库快照缓存
+      tags:
+      - 插件
+  /api/plugin/instance/snapshot-stats:
+    post:
+      consumes:
+      - application/json
+      description: 优先读取备份日志缓存；没有统计时查询 Restic 并写入对应备份日志。
+      parameters:
+      - description: 仓库插件实例 Id
+        in: query
+        name: id
+        required: true
+        type: integer
+      - description: Restic 快照 Id
+        in: query
+        name: snapshotId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - bearerAuth: []
+      summary: 查询单个快照统计
+      tags:
+      - 插件
+  /api/plugin/instance/snapshots:
+    post:
+      consumes:
+      - application/json
+      description: 返回 Restic 快照及已存在的备份日志关联；不存在的备份 Summary 不会返回。
+      parameters:
+      - description: 仓库插件实例 Id
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - bearerAuth: []
+      summary: 查询仓库快照
+      tags:
+      - 插件
+  /api/plugin/instance/stats:
+    post:
+      consumes:
+      - application/json
+      description: 返回 repository_info 中缓存的仓库统计；缓存缺失时会先刷新仓库数据。
+      parameters:
+      - description: 仓库插件实例 Id
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - bearerAuth: []
+      summary: 查询仓库统计
+      tags:
+      - 插件
+  /api/user/batchDelete:
+    post:
+      consumes:
+      - application/json
+      description: 需要 admin 权限。
+      parameters:
+      - description: 用户 Id 列表
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/logic.UpdateUserInput'
+          $ref: '#/definitions/sys.batchDeleteInput'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/user.UserResponse'
+            additionalProperties: true
+            type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/user.ErrorResponse'
+            $ref: '#/definitions/sys.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/user.ErrorResponse'
+            $ref: '#/definitions/sys.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/user.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/user.ErrorResponse'
+            $ref: '#/definitions/sys.ErrorResponse'
       security:
       - bearerAuth: []
-      summary: 更新用户
+      summary: 批量删除用户
       tags:
       - 用户
-  /api/users/create:
+  /api/user/create:
     post:
       consumes:
       - application/json
@@ -266,29 +431,101 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/user.UserResponse'
+            $ref: '#/definitions/sys.UserResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/user.ErrorResponse'
+            $ref: '#/definitions/sys.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/user.ErrorResponse'
+            $ref: '#/definitions/sys.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/user.ErrorResponse'
+            $ref: '#/definitions/sys.ErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/user.ErrorResponse'
+            $ref: '#/definitions/sys.ErrorResponse'
       security:
       - bearerAuth: []
       summary: 创建用户
       tags:
       - 用户
-  /api/users/list:
+  /api/user/delete:
+    post:
+      description: 需要 admin 权限。
+      parameters:
+      - description: 用户 Id
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/sys.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/sys.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/sys.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/sys.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: 删除用户
+      tags:
+      - 用户
+  /api/user/info:
+    post:
+      description: 需要 read、write 或 admin 权限。
+      parameters:
+      - description: 用户 Id
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/sys.UserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/sys.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/sys.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/sys.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/sys.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: 获取用户详情
+      tags:
+      - 用户
+  /api/user/list:
     post:
       description: 需要 read、write 或 admin 权限。
       produces:
@@ -297,18 +534,86 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/user.UserListResponse'
+            $ref: '#/definitions/sys.UserListResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/user.ErrorResponse'
+            $ref: '#/definitions/sys.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/user.ErrorResponse'
+            $ref: '#/definitions/sys.ErrorResponse'
       security:
       - bearerAuth: []
       summary: 获取用户列表
+      tags:
+      - 用户
+  /api/user/page:
+    post:
+      description: 需要 read、write 或 admin 权限。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/sys.UserListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/sys.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/sys.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: 获取用户列表
+      tags:
+      - 用户
+  /api/user/update:
+    post:
+      consumes:
+      - application/json
+      description: 需要 write 或 admin 权限；非管理员只能更新自己的资料且不能修改角色。
+      parameters:
+      - description: 用户 Id
+        in: query
+        name: id
+        required: true
+        type: integer
+      - description: 更新信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/logic.UpdateUserInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/sys.UserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/sys.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/sys.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/sys.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/sys.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: 更新用户
       tags:
       - 用户
 schemes:

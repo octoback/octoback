@@ -15,6 +15,45 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/audit/page": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "查询当前系统中的用户写操作和认证结果审计记录。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "审计"
+                ],
+                "summary": "查询审计日志",
+                "parameters": [
+                    {
+                        "description": "分页和筛选条件",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/audit.AuditLogPageQuery"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/audit.AuditLogPageResult"
+                        }
+                    }
+                }
+            }
+        },
         "/api/auth/login": {
             "post": {
                 "description": "登录成功后返回有效期默认 7 天的 JWT Bearer token。",
@@ -43,19 +82,22 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/user.LoginResponse"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -89,25 +131,359 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/user.UserResponse"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
             }
         },
-        "/api/users/create": {
+        "/api/plan/run/log": {
+            "post": {
+                "description": "返回全量可读执行日志以及解析后的 Restic summary 对象。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "备份计划"
+                ],
+                "summary": "查询备份日志详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "运行记录 Id",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugin/instance/forget-snapshot": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "插件"
+                ],
+                "summary": "删除仓库中的指定快照",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "仓库插件实例 Id",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Restic 快照 Id",
+                        "name": "snapshotId",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugin/instance/info": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "插件"
+                ],
+                "summary": "获取插件实例详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "插件 Id",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugin/instance/refresh-repository-data": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "查询 Restic 快照和仓库统计并写入 repository_info，不查询备份 Summary。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "插件"
+                ],
+                "summary": "刷新仓库快照缓存",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "仓库插件实例 Id",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugin/instance/snapshot-stats": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "优先读取备份日志缓存；没有统计时查询 Restic 并写入对应备份日志。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "插件"
+                ],
+                "summary": "查询单个快照统计",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "仓库插件实例 Id",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Restic 快照 Id",
+                        "name": "snapshotId",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugin/instance/snapshots": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "返回 Restic 快照及已存在的备份日志关联；不存在的备份 Summary 不会返回。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "插件"
+                ],
+                "summary": "查询仓库快照",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "仓库插件实例 Id",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugin/instance/stats": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "返回 repository_info 中缓存的仓库统计；缓存缺失时会先刷新仓库数据。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "插件"
+                ],
+                "summary": "查询仓库统计",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "仓库插件实例 Id",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/user/batchDelete": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "需要 admin 权限。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用户"
+                ],
+                "summary": "批量删除用户",
+                "parameters": [
+                    {
+                        "description": "用户 Id 列表",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/sys.batchDeleteInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/sys.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/sys.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/sys.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/user/create": {
             "post": {
                 "security": [
                     {
@@ -140,74 +516,37 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/user.UserResponse"
+                            "$ref": "#/definitions/sys.UserResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     }
                 }
             }
         },
-        "/api/users/list": {
-            "post": {
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ],
-                "description": "需要 read、write 或 admin 权限。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "用户"
-                ],
-                "summary": "获取用户列表",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/user.UserListResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/users/{id}/delete": {
+        "/api/user/delete": {
             "post": {
                 "security": [
                     {
@@ -227,7 +566,7 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "用户 Id",
                         "name": "id",
-                        "in": "path",
+                        "in": "query",
                         "required": true
                     }
                 ],
@@ -238,31 +577,31 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     }
                 }
             }
         },
-        "/api/users/{id}/detail": {
+        "/api/user/info": {
             "post": {
                 "security": [
                     {
@@ -282,7 +621,7 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "用户 Id",
                         "name": "id",
-                        "in": "path",
+                        "in": "query",
                         "required": true
                     }
                 ],
@@ -290,37 +629,111 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/user.UserResponse"
+                            "$ref": "#/definitions/sys.UserResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     }
                 }
             }
         },
-        "/api/users/{id}/update": {
+        "/api/user/list": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "需要 read、write 或 admin 权限。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用户"
+                ],
+                "summary": "获取用户列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/sys.UserListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/sys.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/sys.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/user/page": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "需要 read、write 或 admin 权限。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用户"
+                ],
+                "summary": "获取用户列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/sys.UserListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/sys.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/sys.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/user/update": {
             "post": {
                 "security": [
                     {
@@ -343,7 +756,7 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "用户 Id",
                         "name": "id",
-                        "in": "path",
+                        "in": "query",
                         "required": true
                     },
                     {
@@ -360,31 +773,31 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/user.UserResponse"
+                            "$ref": "#/definitions/sys.UserResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/user.ErrorResponse"
+                            "$ref": "#/definitions/sys.ErrorResponse"
                         }
                     }
                 }
@@ -392,6 +805,43 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "audit.AuditLogPageQuery": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "audit.AuditLogPageResult": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "records": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.AuditLog"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "logic.CreateUserInput": {
             "type": "object",
             "properties": {
@@ -437,7 +887,42 @@ const docTemplate = `{
                 }
             }
         },
-        "user.ErrorResponse": {
+        "models.AuditLog": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "integer"
+                },
+                "duration": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "operation": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "userId": {
+                    "type": "integer"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "sys.ErrorResponse": {
             "type": "object",
             "properties": {
                 "error": {
@@ -446,27 +931,7 @@ const docTemplate = `{
                 }
             }
         },
-        "user.LoginResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "object",
-                    "properties": {
-                        "expiresAt": {
-                            "type": "integer"
-                        },
-                        "token": {
-                            "type": "string"
-                        },
-                        "user": {
-                            "type": "object",
-                            "additionalProperties": {}
-                        }
-                    }
-                }
-            }
-        },
-        "user.UserListResponse": {
+        "sys.UserListResponse": {
             "type": "object",
             "properties": {
                 "data": {
@@ -483,12 +948,23 @@ const docTemplate = `{
                 }
             }
         },
-        "user.UserResponse": {
+        "sys.UserResponse": {
             "type": "object",
             "properties": {
                 "data": {
                     "type": "object",
                     "additionalProperties": {}
+                }
+            }
+        },
+        "sys.batchDeleteInput": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         }

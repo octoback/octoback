@@ -28,7 +28,7 @@ func TestSwaggerDocumentation(t *testing.T) {
 		t.Fatalf("DB() error = %v", err)
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	if err := db_.Migrate(db, &models.User{}); err != nil {
+	if err := db_.Migrate(db, &models.SysUser{}); err != nil {
 		t.Fatalf("Migrate() error = %v", err)
 	}
 	app := handler.NewApp(&svc.ServiceContext{
@@ -51,11 +51,13 @@ func TestSwaggerDocumentation(t *testing.T) {
 	for _, expected := range []string{
 		"\"/api/auth/login\"",
 		"\"/api/auth/register\"",
-		"\"/api/users/create\"",
-		"\"/api/users/list\"",
-		"\"/api/users/{id}/detail\"",
-		"\"/api/users/{id}/update\"",
-		"\"/api/users/{id}/delete\"",
+		"\"/api/user/create\"",
+		"\"/api/user/list\"",
+		"\"/api/user/page\"",
+		"\"/api/user/info\"",
+		"\"/api/user/update\"",
+		"\"/api/user/delete\"",
+		"\"/api/user/batchDelete\"",
 		"\"bearerAuth\"",
 	} {
 		if !strings.Contains(document.Body, expected) {

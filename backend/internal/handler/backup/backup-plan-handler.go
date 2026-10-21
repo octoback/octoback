@@ -1,4 +1,4 @@
-package sys
+package backup
 
 import (
 	"handfree-work/octo-backup/internal/base/error_"
@@ -11,6 +11,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+// RegisterBackupPlan 注册备份计划和运行记录接口。
 func RegisterBackupPlan(app *fiber.App, s *svc.ServiceContext) {
 	r := app.Group("/api/plan")
 	web_.RegisterRoutes(r, s.Auth,
@@ -104,8 +105,8 @@ func backupPlanLogContent(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 		return logic.NewBackupPlanService(c.Context(), s).LogContent(id)
 	}
 }
-func backupPlanLogPage(s *svc.ServiceContext) func(fiber.Ctx, *logic.BackupLogPageQuery) (any, error) {
-	return func(c fiber.Ctx, q *logic.BackupLogPageQuery) (any, error) {
+func backupPlanLogPage(s *svc.ServiceContext) func(fiber.Ctx, *logic.BackupTaskPageQuery) (any, error) {
+	return func(c fiber.Ctx, q *logic.BackupTaskPageQuery) (any, error) {
 		return logic.NewBackupPlanService(c.Context(), s).LogPage(q)
 	}
 }

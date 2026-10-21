@@ -2,9 +2,10 @@ package handler
 
 import (
 	"handfree-work/octo-backup/internal/base/web_"
+	backupHandler "handfree-work/octo-backup/internal/handler/backup"
 	"handfree-work/octo-backup/internal/handler/basic"
 	sysHandler "handfree-work/octo-backup/internal/handler/sys"
-	userHandler "handfree-work/octo-backup/internal/handler/user"
+	"handfree-work/octo-backup/internal/middleware"
 	"handfree-work/octo-backup/internal/svc"
 
 	"github.com/gofiber/fiber/v3"
@@ -19,11 +20,12 @@ func NewApp(svcCtx *svc.ServiceContext) *fiber.App {
 	return app
 }
 
-// Register 按 basic、user、sys 模块统一注册 handler。
+// Register 按 basic、sys 和 backup 模块统一注册 handler。
 func Register(app *fiber.App, svcCtx *svc.ServiceContext) {
-	app.Use(auditMiddleware(svcCtx))
+	app.Use(middleware.Audit(svcCtx))
 	basic.Register(app)
 	basic.RegisterAuth(app, svcCtx)
-	userHandler.Register(app, svcCtx)
+	basic.RegisterTask(app, svcCtx.Auth)
 	sysHandler.Register(app, svcCtx)
+	backupHandler.Register(app, svcCtx)
 }

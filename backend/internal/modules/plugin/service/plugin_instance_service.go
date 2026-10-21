@@ -5,16 +5,20 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"handfree-work/octo-backup/internal/base/db_"
 	"handfree-work/octo-backup/internal/base/error_"
+	"handfree-work/octo-backup/internal/base/log_"
+	"handfree-work/octo-backup/internal/base/task_"
 	"handfree-work/octo-backup/internal/models"
 	backup "handfree-work/octo-backup/internal/modules/backup/restic"
 	"handfree-work/octo-backup/internal/modules/plugin"
@@ -177,7 +181,7 @@ func (s *PluginInstanceService) Snapshots(id int64) (any, error) {
 	return s.attachSnapshotAssociations(id, data["snapshots"]), nil
 }
 
-// RepositoryStats 查询整个仓库的实际数据统计。
+// RepositoryStats 读取缓存中的仓库统计信息。
 func (s *PluginInstanceService) RepositoryStats(id int64) (any, error) {
 	data, err := s.CachedRepositoryData(id)
 	if err != nil {
@@ -191,60 +195,107 @@ func (s *PluginInstanceService) SnapshotStats(id int64, snapshotId string) (map[
 	if strings.TrimSpace(snapshotId) == "" {
 		return nil, error_.NewTextError("查询快照统计失败: 快照 Id 不能为空")
 	}
-	client, err := s.repositoryClient(id)
-	if err != nil {
-		return nil, err
+	return s.loadSnapshotStats(id, snapshotId, func() (map[string]any, error) {
+		client, err := s.repositoryClient(id)
+		if err != nil {
+			return nil, err
+		}
+		return client.SnapshotStats(s.ctx, snapshotId)
+	})
+}
+
+// loadSnapshotStats 优先读取备份日志缓存，缺失时查询 Restic 并回写统计。
+func (s *PluginInstanceService) loadSnapshotStats(id int64, snapshotId string, fetchStats func() (map[string]any, error)) (map[string]any, error) {
+	startedAt := time.Now()
+	logFields := []zap.Field{zap.Int64("repositoryId", id), zap.String("snapshotId", snapshotId)}
+	log_.Logger.Info("查询快照统计开始", logFields...)
+
+	var backupLog models.BackupTask
+	cacheResult := s.svcCtx.Db.Where("repository_id = ? AND snapshot_id = ?", id, snapshotId).
+		Order("id DESC").First(&backupLog)
+	if cacheResult.Error == nil {
+		stats := map[string]any{}
+		if strings.TrimSpace(backupLog.Stats) != "" && json.Unmarshal([]byte(backupLog.Stats), &stats) == nil && len(stats) > 0 {
+			log_.Logger.Info("命中快照统计缓存", append(logFields, zap.Duration("duration", time.Since(startedAt)))...)
+			return stats, nil
+		}
+		log_.Logger.Warn("快照统计缓存无效，将从 Restic 重新查询", logFields...)
+	} else if !errors.Is(cacheResult.Error, gorm.ErrRecordNotFound) {
+		wrappedErr := error_.NewWrapError("读取快照统计缓存失败", cacheResult.Error)
+		log_.Logger.Error("读取快照统计缓存失败", append(logFields, zap.Duration("duration", time.Since(startedAt)), zap.Error(wrappedErr))...)
+		return nil, wrappedErr
 	}
-	stats, err := client.SnapshotStats(s.ctx, snapshotId)
+
+	log_.Logger.Info("快照统计缓存未命中，开始查询 Restic", logFields...)
+	stats, err := fetchStats()
 	if err != nil {
-		return nil, error_.NewWrapError("查询快照统计失败", err)
+		wrappedErr := error_.NewWrapError("查询快照统计失败", err)
+		log_.Logger.Error("Restic 快照统计查询失败", append(logFields, zap.Duration("duration", time.Since(startedAt)), zap.Error(wrappedErr))...)
+		return nil, wrappedErr
 	}
 	raw, err := json.Marshal(stats)
 	if err != nil {
-		return nil, error_.NewWrapError("序列化快照统计失败", err)
+		wrappedErr := error_.NewWrapError("序列化快照统计失败", err)
+		log_.Logger.Error("序列化快照统计失败", append(logFields, zap.Duration("duration", time.Since(startedAt)), zap.Error(wrappedErr))...)
+		return nil, wrappedErr
 	}
-	result := s.svcCtx.Db.Model(&models.BackupLog{}).
-		Where("repository_id = ? AND snapshot_id = ?", id, snapshotId).
+	result := s.svcCtx.Db.Model(&models.BackupTask{}).
+		Where("id = ?", backupLog.Id).
 		Update("stats", string(raw))
 	if result.Error != nil {
-		return nil, error_.NewWrapError("保存快照统计失败", result.Error)
+		wrappedErr := error_.NewWrapError("保存快照统计失败", result.Error)
+		log_.Logger.Error("保存快照统计失败", append(logFields, zap.Duration("duration", time.Since(startedAt)), zap.Error(wrappedErr))...)
+		return nil, wrappedErr
 	}
+	if errors.Is(cacheResult.Error, gorm.ErrRecordNotFound) || result.RowsAffected == 0 {
+		log_.Logger.Warn("快照统计已查询，但没有匹配的备份日志可写入", append(logFields, zap.Duration("duration", time.Since(startedAt)))...)
+		return stats, nil
+	}
+	log_.Logger.Info("快照统计查询并缓存完成", append(logFields, zap.Int64("backupLogCount", result.RowsAffected), zap.Duration("duration", time.Since(startedAt)))...)
 	return stats, nil
 }
 
-// RefreshRepositoryData 查询 Restic 仓库并更新详情缓存。
-func (s *PluginInstanceService) RefreshRepositoryData(id int64, summary map[string]any) (map[string]any, error) {
+// RefreshRepositoryData 查询 Restic 快照和仓库统计，并更新统一缓存。
+func (s *PluginInstanceService) RefreshRepositoryData(id int64) (map[string]any, error) {
+	startedAt := time.Now()
+	logFields := []zap.Field{zap.Int64("repositoryId", id)}
+	log_.Logger.Info("刷新仓库快照缓存开始", logFields...)
 	client, err := s.repositoryClient(id)
 	if err != nil {
+		log_.Logger.Error("初始化仓库快照查询失败", append(logFields, zap.Duration("duration", time.Since(startedAt)), zap.Error(err))...)
 		return nil, err
 	}
 	snapshots, err := client.Snapshots(s.ctx)
 	if err != nil {
-		return nil, error_.NewWrapError("刷新仓库快照缓存失败", err)
+		wrappedErr := error_.NewWrapError("刷新仓库快照缓存失败", err)
+		log_.Logger.Error("刷新 Restic 仓库快照失败", append(logFields, zap.Duration("duration", time.Since(startedAt)), zap.Error(wrappedErr))...)
+		return nil, wrappedErr
 	}
-	snapshots = s.attachSnapshotAssociations(id, snapshots)
 	stats, err := client.Stats(s.ctx)
 	if err != nil {
-		return nil, error_.NewWrapError("刷新仓库统计缓存失败", err)
+		wrappedErr := error_.NewWrapError("刷新 Restic 仓库统计失败", err)
+		log_.Logger.Error("刷新 Restic 仓库统计失败", append(logFields, zap.Duration("duration", time.Since(startedAt)), zap.Error(wrappedErr))...)
+		return nil, wrappedErr
 	}
-	if summary == nil {
-		cached, cacheErr := s.CachedRepositoryData(id)
-		if cacheErr == nil {
-			if cachedSummary, ok := cached["summary"].(map[string]any); ok {
-				summary = cachedSummary
-			}
-		}
-	}
-	data := map[string]any{"snapshots": snapshots, "stats": stats, "summary": summary, "updatedAt": time.Now().UnixMilli()}
+	data := map[string]any{"snapshots": snapshots, "stats": stats, "updatedAt": time.Now().UnixMilli()}
 	raw, err := yaml.Marshal(data)
 	if err != nil {
-		return nil, error_.NewWrapError("序列化仓库详情缓存失败", err)
+		wrappedErr := error_.NewWrapError("序列化仓库快照缓存失败", err)
+		log_.Logger.Error("序列化仓库快照缓存失败", append(logFields, zap.Duration("duration", time.Since(startedAt)), zap.Error(wrappedErr))...)
+		return nil, wrappedErr
 	}
 	repositoryId := id
-	row := &models.RepoDataInfo{RepositoryId: &repositoryId, DataYAML: string(raw)}
-	if err := s.svcCtx.Db.Where("repository_id = ?", id).Assign(map[string]any{"data_yaml": string(raw)}).FirstOrCreate(row).Error; err != nil {
-		return nil, error_.NewWrapError("保存仓库详情缓存失败", err)
+	row := &models.RepositoryInfo{RepositoryId: &repositoryId, Content: string(raw)}
+	if err := s.svcCtx.Db.Where("repository_id = ?", id).Assign(map[string]any{"content": string(raw)}).FirstOrCreate(row).Error; err != nil {
+		wrappedErr := error_.NewWrapError("保存仓库快照缓存失败", err)
+		log_.Logger.Error("保存仓库快照缓存失败", append(logFields, zap.Duration("duration", time.Since(startedAt)), zap.Error(wrappedErr))...)
+		return nil, wrappedErr
 	}
+	snapshotCount := 0
+	if items, ok := snapshots.([]any); ok {
+		snapshotCount = len(items)
+	}
+	log_.Logger.Info("仓库快照缓存刷新完成", append(logFields, zap.Int("snapshotCount", snapshotCount), zap.Duration("duration", time.Since(startedAt)))...)
 	return data, nil
 }
 
@@ -254,9 +305,27 @@ func (s *PluginInstanceService) attachSnapshotAssociations(repositoryId int64, v
 	if !ok {
 		return value
 	}
-	associations := make(map[string]models.BackupLog)
-	var logs []models.BackupLog
-	if s.svcCtx.Db.Where("repository_id = ? AND snapshot_id <> ''", repositoryId).Find(&logs).Error == nil {
+	associations := make(map[string]models.BackupTask)
+	snapshotIds := make([]string, 0, len(items))
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		delete(entry, "planId")
+		delete(entry, "sourceId")
+		delete(entry, "summary")
+		delete(entry, "stats")
+		snapshotId := strings.TrimSpace(fmt.Sprint(entry["id"]))
+		if snapshotId == "" {
+			snapshotId = strings.TrimSpace(fmt.Sprint(entry["snapshot_id"]))
+		}
+		if snapshotId != "" {
+			snapshotIds = append(snapshotIds, snapshotId)
+		}
+	}
+	var logs []models.BackupTask
+	if len(snapshotIds) > 0 && s.svcCtx.Db.Where("repository_id = ? AND snapshot_id IN ?", repositoryId, snapshotIds).Find(&logs).Error == nil {
 		for _, row := range logs {
 			if row.SnapshotId != nil && strings.TrimSpace(*row.SnapshotId) != "" {
 				associations[*row.SnapshotId] = row
@@ -293,18 +362,24 @@ func (s *PluginInstanceService) attachSnapshotAssociations(repositoryId int64, v
 	return items
 }
 
-// CachedRepositoryData 读取仓库详情缓存，尚未刷新时返回空数据。
+// CachedRepositoryData 读取仓库详情缓存；缓存未命中时先从 Restic 刷新并持久化。
 func (s *PluginInstanceService) CachedRepositoryData(id int64) (map[string]any, error) {
-	var row models.RepoDataInfo
+	var row models.RepositoryInfo
 	if err := s.svcCtx.Db.Where("repository_id = ?", id).First(&row).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return map[string]any{"snapshots": []any{}, "stats": map[string]any{}}, nil
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return s.RefreshRepositoryData(id)
 		}
-		return nil, error_.NewWrapError("读取仓库详情缓存失败", err)
+		return nil, error_.NewWrapError("读取仓库快照缓存失败", err)
 	}
 	data := map[string]any{}
-	if err := yaml.Unmarshal([]byte(row.DataYAML), &data); err != nil {
-		return nil, error_.NewWrapError("解析仓库详情缓存失败", err)
+	if err := yaml.Unmarshal([]byte(row.Content), &data); err != nil {
+		return nil, error_.NewWrapError("解析仓库快照缓存失败", err)
+	}
+	if _, snapshotsExists := data["snapshots"]; !snapshotsExists {
+		return s.RefreshRepositoryData(id)
+	}
+	if _, statsExists := data["stats"]; !statsExists {
+		return s.RefreshRepositoryData(id)
 	}
 	return data, nil
 }
@@ -335,6 +410,10 @@ func (s *PluginInstanceService) ResticRepositoryConfig(id int64) (backup.ClientC
 		if err != nil {
 			return backup.ClientConfig{}, err
 		}
+		repositoryAccessId, err := strconv.ParseInt(strings.TrimSpace(fmt.Sprint(config["accessId"])), 10, 64)
+		if err != nil {
+			return backup.ClientConfig{}, error_.NewTextError("仓库 SSH 授权 Id 无效")
+		}
 		accessConfig, ok := access["config"].(map[string]any)
 		if !ok {
 			return backup.ClientConfig{}, error_.NewTextError("仓库 SSH 授权配置无效")
@@ -347,7 +426,7 @@ func (s *PluginInstanceService) ResticRepositoryConfig(id int64) (backup.ClientC
 		if !ok {
 			return backup.ClientConfig{}, error_.NewTextError("仓库 SSH 授权类型无效")
 		}
-		return backup.ClientConfig{RepositoryAccess: sshConfig, RepositoryPath: repository.Path, RepositoryPassword: repository.Password}, nil
+		return backup.ClientConfig{RepositoryAccess: sshConfig, RepositoryAccessId: repositoryAccessId, RepositoryPath: repository.Path, RepositoryPassword: repository.Password}, nil
 	case *aliossrepository.AliOSSRepository:
 		access, err := s.resolveAccess(config["accessId"])
 		if err != nil {
@@ -387,6 +466,29 @@ func (s *PluginInstanceService) CheckRepository(id int64) error {
 	return client.Check(s.ctx)
 }
 
+const repositoryCheckTaskType = "repository-check"
+
+// StartCheckRepository 启动仓库检查任务并返回任务状态快照。
+func (s *PluginInstanceService) StartCheckRepository(id int64) (*task_.Task, error) {
+	client, err := s.repositoryClient(id)
+	if err != nil {
+		return nil, err
+	}
+	task := task_.NewTask(repositoryCheckTaskType, strconv.FormatInt(id, 10), "检查仓库", func(item *task_.Task) error {
+		item.SetTotal(1)
+		if err := client.Check(item.Context()); err != nil {
+			return error_.NewWrapError("检查仓库失败", err)
+		}
+		item.IncrementCurrent()
+		return nil
+	})
+	if err := task_.DefaultExecutor.Start(task); err != nil {
+		return nil, error_.NewTextError("启动仓库检查失败: %v", err)
+	}
+	status, _ := task_.DefaultExecutor.Get(repositoryCheckTaskType, strconv.FormatInt(id, 10))
+	return status, nil
+}
+
 // SnapshotBrowser 查询指定 Restic 快照中的文件条目。
 func (s *PluginInstanceService) SnapshotBrowser(id int64, snapshotId string) (any, error) {
 	clientConfig, err := s.ResticRepositoryConfig(id)
@@ -411,7 +513,7 @@ func (s *PluginInstanceService) ForgetSnapshot(id int64, snapshotId string) erro
 	if err := client.ForgetSnapshot(s.ctx, snapshotId); err != nil {
 		return error_.NewWrapError("删除仓库快照失败", err)
 	}
-	if _, err := s.RefreshRepositoryData(id, nil); err != nil {
+	if _, err := s.RefreshRepositoryData(id); err != nil {
 		return error_.NewWrapError("删除仓库快照后刷新仓库数据失败", err)
 	}
 	return nil

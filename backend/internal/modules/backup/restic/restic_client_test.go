@@ -21,7 +21,7 @@ func (e *recordingExecutor) Prepare(context.Context, *ClientConfig) error {
 	e.events = append(e.events, "prepare")
 	return nil
 }
-func (e *recordingExecutor) PrepareRepositoryAccess(context.Context, *ClientConfig) error {
+func (e *recordingExecutor) CheckRepositoryAccess(_ context.Context, config *ClientConfig) error {
 	e.events = append(e.events, "check-repository-access")
 	return e.repositoryAccessError
 }

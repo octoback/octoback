@@ -21,4 +21,10 @@ export const createRestoreTask = (data: { repositoryId: number; snapshotId: stri
 export const getRestoreTaskPage = (data: Record<string, unknown> = {}) => request({ url: "/restore/task/page", method: "post", data });
 export const getRestoreTaskInfo = (id: number) => request({ url: `/restore/task/info?id=${id}`, method: "post", data: {} });
 export const getRestoreTaskLog = (id: number) => request({ url: `/restore/task/log?id=${id}`, method: "post", data: {} });
+export interface RestoreTaskLog {
+  id: number;
+  level: string;
+  message: string;
+  createdAt: number;
+}
 export const deleteRestoreTask = (id: number) => request({ url: `/restore/task/delete?id=${id}`, method: "post", data: {} });

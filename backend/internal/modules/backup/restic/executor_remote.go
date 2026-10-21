@@ -2,6 +2,8 @@ package restic
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"path"
@@ -12,16 +14,75 @@ import (
 	"go.uber.org/zap"
 	"handfree-work/octo-backup/internal/base/error_"
 	"handfree-work/octo-backup/internal/base/log_"
-	sshaccess "handfree-work/octo-backup/internal/plugins/access/ssh"
 )
 
 // RemoteResticExecutor 通过已连接的 SSH 主机执行 Restic 命令。
 type RemoteResticExecutor struct {
-	Access     *sshaccess.SshAccess
+	Access     remoteSshAccess
 	BinaryPath string
 	Progress   func(progress int, stage string)
 	Log        func(level string, message string)
 	RemoteDir  string
+}
+
+// CheckRepositoryAccess 在来源服务器上验证 SFTP 仓库认证，并按需保存仓库私钥。
+func (e *RemoteResticExecutor) CheckRepositoryAccess(ctx context.Context, config *ClientConfig) error {
+	access := config.RepositoryAccess
+	if access == nil {
+		return nil
+	}
+	if access.Password == "" {
+		if strings.TrimSpace(access.PrivateKey) == "" {
+			return error_.NewTextError("SFTP SSH 授权必须配置密码或私钥")
+		}
+		if config.RepositoryAccessId <= 0 {
+			return error_.NewTextError("SFTP 仓库 SSH 授权 Id 无效")
+		}
+		keyPath := repositoryPrivateKeyPath(config.RepositoryAccessId)
+		if _, err := e.Access.Execute(ctx, "mkdir -p '.ssh' && chmod 700 '.ssh'"); err != nil {
+			return error_.NewWrapError("创建来源服务器 SSH 密钥目录失败", err)
+		}
+		keyHash := sha256.Sum256([]byte(access.PrivateKey))
+		expectedHash := hex.EncodeToString(keyHash[:])
+		keyState, err := e.Access.Execute(ctx, "if [ -f "+shellQuote(keyPath)+" ]; then sha256sum "+shellQuote(keyPath)+" | awk '{print $1}'; else printf missing; fi")
+		if err != nil {
+			return error_.NewWrapError("检查来源服务器 SFTP 私钥文件失败", err)
+		}
+		remoteKeyHash := strings.TrimSpace(string(keyState))
+		if remoteKeyHash == "missing" || remoteKeyHash != expectedHash {
+			if err := e.Access.Upload(ctx, keyPath, []byte(access.PrivateKey), 0600); err != nil {
+				return error_.NewWrapError("写入来源服务器 SFTP 私钥文件失败", err)
+			}
+		} else if remoteKeyHash == expectedHash {
+			if _, err := e.Access.Execute(ctx, "chmod 600 "+shellQuote(keyPath)); err != nil {
+				return error_.NewWrapError("设置来源服务器 SFTP 私钥权限失败", err)
+			}
+		} else {
+			return error_.NewTextError("检查来源服务器 SFTP 私钥文件失败: 返回状态无效")
+		}
+		agentEnvPath := repositoryAgentEnvironmentPath(config.RepositoryAccessId)
+		agentCommand := "if [ -f " + shellQuote(agentEnvPath) + " ]; then . " + shellQuote(agentEnvPath) + "; fi; if [ -z \"${SSH_AUTH_SOCK:-}\" ]; then ssh-agent -s > " + shellQuote(agentEnvPath) + "; . " + shellQuote(agentEnvPath) + "; fi"
+		if _, err := e.Access.Execute(ctx, agentCommand); err != nil {
+			return error_.NewWrapError("来源服务器启动 ssh-agent 失败", err)
+		}
+		addCommand := ". " + shellQuote(agentEnvPath) + "; ssh-add " + shellQuote(keyPath)
+		if _, err := e.Access.ExecuteWithInput(ctx, addCommand, []byte(access.PrivateKeyPassword+"\n")); err != nil {
+			return error_.NewWrapError("来源服务器将 SFTP 私钥加入 ssh-agent 失败", err)
+		}
+	}
+	if _, err := e.Access.Execute(ctx, repositorySftpProbeCommand(config)); err != nil {
+		return repositorySftpConnectionError(config, err)
+	}
+	return nil
+}
+
+type remoteSshAccess interface {
+	Connect(context.Context) error
+	Close() error
+	Platform(context.Context) (string, string, error)
+	Upload(context.Context, string, []byte, uint32) error
+	Execute(context.Context, string) ([]byte, error)
+	ExecuteWithInput(context.Context, string, []byte) ([]byte, error)
 }
 
 func repositoryURL(config *ClientConfig) string {
@@ -135,7 +196,30 @@ func repositorySftpCommand(config *ClientConfig) string {
 	if config.RepositoryAccess == nil {
 		return ""
 	}
-	return "ssh -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -p " + fmt.Sprint(config.RepositoryAccess.Port) + " " + shellQuote(config.RepositoryAccess.Username+"@"+config.RepositoryAccess.Host) + " -s sftp"
+	command := "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -p " + fmt.Sprint(config.RepositoryAccess.Port)
+	if config.RepositoryAccess.Password == "" && strings.TrimSpace(config.RepositoryAccess.PrivateKey) != "" {
+		command = ". " + shellQuote(repositoryAgentEnvironmentPath(config.RepositoryAccessId)) + "; " + command
+	}
+	return command + " " + shellQuote(config.RepositoryAccess.Username+"@"+config.RepositoryAccess.Host) + " -s sftp"
+}
+
+func repositorySftpProbeCommand(config *ClientConfig) string {
+	return repositorySftpCommand(config) + " </dev/null >/dev/null"
+}
+
+func repositoryPrivateKeyPath(accessId int64) string {
+	return fmt.Sprintf("./.ssh/key_%d.key", accessId)
+}
+
+func repositoryAgentEnvironmentPath(accessId int64) string {
+	return fmt.Sprintf("./.ssh/agent_%d.env", accessId)
+}
+
+func repositorySftpConnectionError(config *ClientConfig, err error) error {
+	if config.RepositoryAccess != nil && config.RepositoryAccess.Password != "" {
+		return error_.NewWrapError("来源服务器无法连接 SFTP 仓库；请在来源服务器上配置免密登录 SFTP，或修改 SFTP 授权为私钥登录方式", err)
+	}
+	return error_.NewWrapError("来源服务器使用配置的私钥连接 SFTP 仓库失败", err)
 }
 
 // Execute 在远程主机执行 Restic 命令，并通过 shell 环境赋值传入变量。

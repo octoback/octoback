@@ -3,16 +3,12 @@ import { Modal } from "ant-design-vue";
 import { h } from "vue";
 import { deleteRestoreTask, getRestoreTaskLog, getRestoreTaskPage, type RestoreTask } from "./api";
 
-const logLevelPattern = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \[(INFO|WARN|ERROR)\] (.*)$/;
-
-function renderLogContent(content: string) {
-  return content.split("\n").map((line, index) => {
-    const match = logLevelPattern.exec(line);
-    if (!match) {
-      return h("div", { key: index, class: "restore-task-log-line restore-task-log-line-plain" }, line || " ");
-    }
-    const [, timestamp, level, message] = match;
-    return h("div", { key: index, class: `restore-task-log-line restore-task-log-level-${level.toLowerCase()}` }, [
+function renderLogContent(logs: Array<{ id: number; level: string; message: string; createdAt: number }>) {
+  return logs.map((log) => {
+    const level = log.level || "INFO";
+    const timestamp = new Date(log.createdAt).toLocaleString("zh-CN", { hour12: false });
+    const message = log.message;
+    return h("div", { key: log.id, class: `restore-task-log-line restore-task-log-level-${level.toLowerCase()}` }, [
       h("span", { class: "restore-task-log-time" }, timestamp),
       h("span", { class: "restore-task-log-level" }, level),
       h("span", { class: "restore-task-log-message" }, message)
@@ -22,12 +18,12 @@ function renderLogContent(content: string) {
 
 export default function (): CreateCrudOptionsRet<RestoreTask> {
   const showLog = async (row: RestoreTask) => {
-    const result = (await getRestoreTaskLog(row.id)) as { content?: string };
+    const result = (await getRestoreTaskLog(row.id)) as { logs?: Array<{ id: number; level: string; message: string; createdAt: number }> };
     Modal.info({
       title: `恢复日志 - 任务 ${row.id}`,
       width: 980,
       wrapClassName: "restore-task-log-modal",
-      content: h("div", { class: "restore-task-log-terminal" }, renderLogContent(result.content || "暂无恢复执行日志"))
+      content: h("div", { class: "restore-task-log-terminal" }, result.logs?.length ? renderLogContent(result.logs) : "暂无恢复执行日志")
     });
   };
   const statusDict = dict({

@@ -55,12 +55,12 @@ type BackupPlanSimple struct {
 	Id   int64  `json:"id"`
 	Name string `json:"name"`
 }
-type BackupLogPageQuery struct {
+type BackupTaskPageQuery struct {
 	Offset int64 `json:"offset"`
 	Limit  int64 `json:"limit"`
 	PlanId int64 `json:"planId"`
 }
-type BackupLogPageResult struct {
+type BackupTaskPageResult struct {
 	Offset  int64            `json:"offset"`
 	Limit   int64            `json:"limit"`
 	Records []map[string]any `json:"records"`
@@ -269,17 +269,17 @@ func (s *BackupPlanService) Run(id int64) (map[string]any, error) {
 	}
 	sourceId := plan.SourceId
 	repositoryId := plan.RepositoryId
-	row := &models.BackupLog{PlanId: id, SourceId: &sourceId, RepositoryId: &repositoryId, Status: "queued", Progress: 0, Stage: "排队中", StartedAt: now}
-	if err := db_.New[models.BackupLog](db_.NewCtx(s.ctx, s.svcCtx.Db)).Create(row); err != nil {
+	row := &models.BackupTask{PlanId: id, SourceId: &sourceId, RepositoryId: &repositoryId, Status: "queued", Progress: 0, Stage: "排队中", StartedAt: now}
+	if err := db_.New[models.BackupTask](db_.NewCtx(s.ctx, s.svcCtx.Db)).Create(row); err != nil {
 		return nil, err
 	}
-	appendBackupLog(s.svcCtx.Db, *row.Id, "INFO", fmt.Sprintf("cron 触发备份计划，已创建运行记录：%d", *row.Id))
+	appendBackupTask(s.svcCtx.Db, *row.Id, "INFO", fmt.Sprintf("cron 触发备份计划，已创建运行记录：%d", *row.Id))
 	go NewBackupExecuteService(context.Background(), s.svcCtx).Execute(id, *row.Id)
 	return map[string]any{"logId": row.Id, "status": row.Status}, nil
 }
 
 func (s *BackupPlanService) Log(id int64) (map[string]any, error) {
-	row, err := db_.New[models.BackupLog](db_.NewCtx(s.ctx, s.svcCtx.Db)).GetById(id)
+	row, err := db_.New[models.BackupTask](db_.NewCtx(s.ctx, s.svcCtx.Db)).GetById(id)
 	if err != nil {
 		return nil, err
 	}
@@ -296,14 +296,13 @@ func (s *BackupPlanService) Log(id int64) (map[string]any, error) {
 
 // LogContent 查询指定运行记录保存的完整 Restic 输出日志。
 func (s *BackupPlanService) LogContent(id int64) (map[string]any, error) {
-	var content models.BackupLogContent
-	var logRow models.BackupLog
+	var logRow models.BackupTask
 	if err := s.svcCtx.Db.First(&logRow, id).Error; err != nil {
 		return nil, error_.NewApiError(err)
 	}
-	contentResult := s.svcCtx.Db.Where("backup_log_id = ?", id).First(&content)
-	if contentResult.Error != nil && contentResult.Error != gorm.ErrRecordNotFound {
-		return nil, error_.NewApiError(contentResult.Error)
+	var logs []models.BackupTaskLog
+	if err := s.svcCtx.Db.Where("backup_task_id = ?", id).Order("id asc").Find(&logs).Error; err != nil {
+		return nil, error_.NewApiError(err)
 	}
 	var summary any
 	if strings.TrimSpace(logRow.Summary) != "" {
@@ -311,9 +310,9 @@ func (s *BackupPlanService) LogContent(id int64) (map[string]any, error) {
 			return nil, error_.NewWrapError("解析 Restic summary 失败", err)
 		}
 	}
-	return map[string]any{"id": id, "content": content.Content, "summary": summary}, nil
+	return map[string]any{"id": id, "logs": logs, "summary": summary}, nil
 }
-func (s *BackupPlanService) LogPage(q *BackupLogPageQuery) (*BackupLogPageResult, error) {
+func (s *BackupPlanService) LogPage(q *BackupTaskPageQuery) (*BackupTaskPageResult, error) {
 	off, lim := int64(0), int64(20)
 	if q != nil {
 		off, lim = q.Offset, q.Limit
@@ -327,7 +326,7 @@ func (s *BackupPlanService) LogPage(q *BackupLogPageQuery) (*BackupLogPageResult
 	if lim > 1000 {
 		lim = 1000
 	}
-	db := s.svcCtx.Db.Table("backup_log l").Select("l.id, l.plan_id, p.name AS plan_name, p.repository_id, l.status, l.progress, l.stage, l.result, l.error, l.started_at, l.finished_at").Joins("LEFT JOIN backup_plan p ON p.id = l.plan_id")
+	db := s.svcCtx.Db.Table("backup_task l").Select("l.id, l.plan_id, p.name AS plan_name, p.repository_id, l.status, l.progress, l.stage, l.result, l.error, l.started_at, l.finished_at").Joins("LEFT JOIN backup_plan p ON p.id = l.plan_id")
 	if q != nil && q.PlanId > 0 {
 		db = db.Where("l.plan_id = ?", q.PlanId)
 	}
@@ -358,7 +357,7 @@ func (s *BackupPlanService) LogPage(q *BackupLogPageQuery) (*BackupLogPageResult
 		}
 		records = append(records, map[string]any{"id": row.Id, "planId": row.PlanId, "planName": row.PlanName, "repositoryId": row.RepositoryId, "status": row.Status, "progress": row.Progress, "stage": row.Stage, "result": row.Result, "error": row.Error, "startedAt": row.StartedAt * 1000, "finishedAt": finishedAt})
 	}
-	return &BackupLogPageResult{Offset: off, Limit: lim, Records: records, Total: total}, nil
+	return &BackupTaskPageResult{Offset: off, Limit: lim, Records: records, Total: total}, nil
 }
 func (s *BackupPlanService) Page(q *BackupPlanPageQuery) (*BackupPlanPageResult, error) {
 	off, lim := int64(0), int64(20)

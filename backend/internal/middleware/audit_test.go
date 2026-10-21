@@ -1,4 +1,4 @@
-package handler
+package middleware
 
 import (
 	"handfree-work/octo-backup/internal/base/web_"
@@ -21,7 +21,7 @@ func TestAuditMiddlewarePersistsAuthenticatedApiOperation(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := fiber.New()
-	app.Use(auditMiddleware(&svc.ServiceContext{Db: database}))
+	app.Use(Audit(&svc.ServiceContext{Db: database}))
 	app.Post("/api/test", func(c fiber.Ctx) error {
 		c.Locals("authClaims", &web_.Claims{UserId: 7, Username: "alice"})
 		web_.AuditLog(c, "测试操作")

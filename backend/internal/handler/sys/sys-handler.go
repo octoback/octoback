@@ -7,10 +7,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-// Register 预留系统模块的路由装配入口。
+// Register 注册用户管理和审计日志接口。
 func Register(app *fiber.App, svcCtx *svc.ServiceContext) {
-	RegisterPlugin(app, svcCtx)
-	RegisterBackupPlan(app, svcCtx)
-	RegisterRestoreTask(app, svcCtx)
+	RegisterUsers(app, svcCtx)
 	RegisterAudit(app, svcCtx)
 }

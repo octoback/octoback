@@ -25,7 +25,7 @@ func ResetPassword(db *gorm.DB, username, password string) error {
 	if username == "" || strings.TrimSpace(password) == "" {
 		return ErrInvalidInput
 	}
-	var user models.User
+	var user models.SysUser
 	if err := db.Where("username = ?", username).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return error_.NewWrapError(fmt.Sprintf("用户不存在: %s", username), ErrUserNotFound)
@@ -36,7 +36,7 @@ func ResetPassword(db *gorm.DB, username, password string) error {
 	if err := user.EncryptPassword(hex.EncodeToString(digest[:])); err != nil {
 		return error_.NewWrapError("加密密码", err)
 	}
-	if err := db.Model(&models.User{}).Where("id = ?", user.Id).Update("password", user.Password).Error; err != nil {
+	if err := db.Model(&models.SysUser{}).Where("id = ?", user.Id).Update("password", user.Password).Error; err != nil {
 		return error_.NewWrapError("保存密码", err)
 	}
 	return nil

@@ -68,7 +68,7 @@ func TestRegisterLoginAndDeclaredPermissions(t *testing.T) {
 		t.Fatalf("DB() error = %v", err)
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	if err := db_.Migrate(db, &models.User{}, &models.AuditLog{}); err != nil {
+	if err := db_.Migrate(db, &models.SysUser{}, &models.AuditLog{}); err != nil {
 		t.Fatalf("Migrate() error = %v", err)
 	}
 	app := handler.NewApp(&svc.ServiceContext{
