@@ -23,9 +23,7 @@ func NewApp(svcCtx *svc.ServiceContext) *fiber.App {
 // Register 按 basic、sys 和 backup 模块统一注册 handler。
 func Register(app *fiber.App, svcCtx *svc.ServiceContext) {
 	app.Use(middleware.Audit(svcCtx))
-	basic.Register(app)
-	basic.RegisterAuth(app, svcCtx)
-	basic.RegisterTask(app, svcCtx.Auth)
+	basic.Register(app, svcCtx)
 	sysHandler.Register(app, svcCtx)
 	backupHandler.Register(app, svcCtx)
 }

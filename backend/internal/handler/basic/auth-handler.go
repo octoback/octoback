@@ -3,6 +3,7 @@ package basic
 import (
 	"handfree-work/octo-backup/internal/base/error_"
 	"handfree-work/octo-backup/internal/base/web_"
+	"handfree-work/octo-backup/internal/models"
 	logic "handfree-work/octo-backup/internal/modules/user"
 	"handfree-work/octo-backup/internal/svc"
 
@@ -28,8 +29,8 @@ func RegisterAuth(app *fiber.App, svcCtx *svc.ServiceContext) {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 409 {object} map[string]interface{}
 // @Router /api/auth/register [post]
-func registerUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.CreateUserInput) (any, error) {
-	return func(c fiber.Ctx, input *logic.CreateUserInput) (any, error) {
+func registerUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.CreateUserInput) (*models.SysUser, error) {
+	return func(c fiber.Ctx, input *logic.CreateUserInput) (*models.SysUser, error) {
 		defer web_.AuditLog(c, "注册用户")
 		if true {
 			//当前禁止注册用户

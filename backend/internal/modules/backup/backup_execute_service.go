@@ -201,11 +201,11 @@ func (s *BackupExecuteService) doBackup(plan *models.BackupPlan, source plugin.P
 	if err != nil {
 		return nil, err
 	}
-	accessIDValue := int64(sourceConfig.AccessId)
-	if accessIDValue <= 0 {
+	accessIdValue := int64(sourceConfig.AccessId)
+	if accessIdValue <= 0 {
 		return nil, error_.NewTextError("SSH 授权配置不存在")
 	}
-	accessPlugin, err := instance.Instance(accessIDValue)
+	accessPlugin, err := instance.Instance(accessIdValue)
 	if err != nil {
 		return nil, err
 	}

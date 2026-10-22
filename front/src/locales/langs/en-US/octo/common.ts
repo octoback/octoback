@@ -8,14 +8,14 @@ export default {
       i18n: {
         name: "name",
         city: "city",
-        status: "status",
-      },
-    },
+        status: "status"
+      }
+    }
   },
   fs: {
     rowHandle: {
-      title: "Operation",
-    },
+      title: "Operation"
+    }
   },
   close: "Close",
   confirm: "Confirm",
@@ -29,7 +29,7 @@ export default {
     edit: "Edit",
     remove: "Delete",
     addSuccess: "Added successfully",
-    saveSuccess: "Saved successfully",
+    saveSuccess: "Saved successfully"
   },
   saveSuccess: "Saved successfully",
   cancel: "Cancel",
@@ -84,7 +84,7 @@ export default {
   selectIsDefault: "Please select if default",
   isDisabled: "Is Disabled",
   fields: {
-    userId: "User ID",
+    userId: "User Id",
     pipelineName: "Pipeline Name",
     keyword: "Keyword",
     required: "This field is required",
@@ -111,7 +111,7 @@ export default {
     pipelineId: "Pipeline Id",
     nextRunTime: "Next Run Time",
     projectName: "Project",
-    adminId: "Admin",
+    adminId: "Admin"
   },
   enterName: "Please enter a name",
   prompt: "Prompt",
@@ -142,46 +142,46 @@ export default {
       centralizedManagement: "Centralized Management",
       statusMonitoring: "Status Monitoring",
       costSaving: "Cost Saving",
-      secureReliable: "Secure and Reliable",
+      secureReliable: "Secure and Reliable"
     },
     features: {
       autoApply: {
         title: "Automated Certificate Application",
-        description: "Supports DNS-01, HTTP-01, CNAME proxy, and other domain validation methods",
+        description: "Supports DNS-01, HTTP-01, CNAME proxy, and other domain validation methods"
       },
       autoDeploy: {
         title: "Automated Deployment Updates",
-        description: "Supports 110+ deployment plugins covering mainstream cloud providers",
+        description: "Supports 110+ deployment plugins covering mainstream cloud providers"
       },
       certFormats: {
         title: "Multiple Certificate Formats",
-        description: "Supports PEM, PFX, DER, JKS, and P7B formats",
+        description: "Supports PEM, PFX, DER, JKS, and P7B formats"
       },
       wildcardSupport: {
         title: "Wildcard Domain Support",
-        description: "Supports wildcard domains and placing multiple domains in one certificate",
+        description: "Supports wildcard domains and placing multiple domains in one certificate"
       },
       notifications: {
         title: "Multiple Notification Methods",
-        description: "Supports email, webhooks, WeCom, DingTalk, Feishu, and other notifications",
+        description: "Supports email, webhooks, WeCom, DingTalk, Feishu, and other notifications"
       },
       security: {
         title: "Security Protection",
-        description: "Authorization encryption, 2FA, brute-force protection, and local data storage",
+        description: "Authorization encryption, 2FA, brute-force protection, and local data storage"
       },
       databases: {
         title: "Multiple Database Support",
-        description: "Supports SQLite, PostgreSQL, and MySQL databases",
+        description: "Supports SQLite, PostgreSQL, and MySQL databases"
       },
       openApi: {
         title: "Open API",
-        description: "Provides RESTful APIs for integration with other systems",
+        description: "Provides RESTful APIs for integration with other systems"
       },
       siteMonitor: {
         title: "Site Certificate Monitoring",
-        description: "Regularly monitors certificate expiration and warns in advance",
-      },
-    },
+        description: "Regularly monitors certificate expiration and warns in advance"
+      }
+    }
   },
   pluginCommon: {
     test: "Test",
@@ -204,7 +204,7 @@ export default {
     certNameHelper: "Display name after upload",
     uploadSuccess: "Upload successful",
     selectCertFirst: "Please select a domain certificate first",
-    targetStepNotFound: "Target step not found. Please select a domain certificate first.",
+    targetStepNotFound: "Target step not found. Please select a domain certificate first."
   },
   captcha: {
     inputImageCode: "Please enter the image captcha",
@@ -213,6 +213,6 @@ export default {
     verifySuccess: "Verification successful",
     verifyFailed: "Verification failed. Please try again.",
     loadFailed: "Failed to load captcha",
-    notLoaded: "Captcha is not loaded yet",
-  },
+    notLoaded: "Captcha is not loaded yet"
+  }
 };

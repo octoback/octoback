@@ -30,7 +30,7 @@ export default function (): CreateCrudOptionsRet<BackupPlan> {
         }
       },
       columns: {
-        id: { title: "ID", type: "text", form: { show: false } },
+        id: { title: "Id", type: "text", form: { show: false } },
         name: { title: "计划名称", type: "text", search: { show: true }, form: { helper: "备份计划名称", rules: [{ required: true, message: "请输入名称" }] } },
         sourceId: { title: "数据资源", type: "text", form: { component: { name: "source-selector", vModel: "modelValue" }, helper: "备份数据来源", rules: [{ required: true, message: "请选择数据资源" }] } },
         repositoryId: {

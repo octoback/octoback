@@ -38,8 +38,8 @@ const swaggerIndex = `<!doctype html>
 </body>
 </html>`
 
-// Register 注册 basic 模块的 Swagger UI 与 OpenAPI JSON 文档。
-func Register(app *fiber.App) {
+// RegisterSwagger 注册 basic 模块的 Swagger UI 与 OpenAPI JSON 文档。
+func RegisterSwagger(app *fiber.App) {
 	app.Get("/swagger", func(c fiber.Ctx) error {
 		return c.Redirect().Status(fiber.StatusMovedPermanently).To("/swagger/index.html")
 	})

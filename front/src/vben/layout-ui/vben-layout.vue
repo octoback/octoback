@@ -8,7 +8,7 @@ import { computed, ref, watch } from "vue";
 import { SCROLL_FIXED_CLASS, useLayoutFooterStyle, useLayoutHeaderStyle } from "../composables";
 import { Menu } from "../icons";
 import { VbenIconButton } from "../shadcn-ui";
-import { ELEMENT_ID_MAIN_CONTENT } from "../shared/constants";
+import { ELEMENT_Id_MAIN_CONTENT } from "../shared/constants";
 
 import { useMouse, useScroll, useThrottleFn } from "@vueuse/core";
 
@@ -384,7 +384,7 @@ function handleHeaderToggle() {
   }
 }
 
-const idMainContent = ELEMENT_ID_MAIN_CONTENT;
+const idMainContent = ELEMENT_Id_MAIN_CONTENT;
 </script>
 
 <template>

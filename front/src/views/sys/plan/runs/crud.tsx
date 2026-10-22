@@ -16,7 +16,7 @@ function formatSummaryDate(value: string) {
 const summaryLabels: Record<string, string> = {
   backup_start: "开始时间",
   backup_end: "结束时间",
-  snapshot_id: "快照 ID",
+  snapshot_id: "快照 Id",
   total_files_processed: "处理文件",
   total_bytes_processed: "处理字节",
   total_duration: "耗时（秒）",
@@ -177,7 +177,7 @@ export default function (): CreateCrudOptionsRet<BackupTask> {
         }
       },
       columns: {
-        id: { title: "ID", type: "text", column: { width: 70 } },
+        id: { title: "Id", type: "text", column: { width: 70 } },
         planId: {
           title: "备份计划",
           type: "dict-select",

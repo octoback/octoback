@@ -38,10 +38,10 @@ export default function (): CreateCrudOptionsRet<RestoreTask> {
     crudOptions: {
       request: { pageRequest: ({ query, page }: any) => getRestoreTaskPage({ offset: page.offset, limit: page.limit, status: query?.status }), delRequest: ({ row }: DelReq<RestoreTask>) => deleteRestoreTask(row.id) },
       columns: {
-        id: { title: "ID", type: "text", column: { width: 70 } },
+        id: { title: "Id", type: "text", column: { width: 70 } },
         title: { title: "恢复标题", type: "text", column: { width: 220 } },
         snapshotId: {
-          title: "快照 ID",
+          title: "快照 Id",
           type: "text",
           column: {
             width: 180,

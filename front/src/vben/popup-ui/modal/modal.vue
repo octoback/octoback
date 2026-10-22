@@ -1,32 +1,16 @@
 <script lang="ts" setup>
-import type { ExtendedModalApi, ModalProps } from './modal';
+import type { ExtendedModalApi, ModalProps } from "./modal";
 
-import { computed, nextTick, provide, ref, useId, watch } from 'vue';
+import { computed, nextTick, provide, ref, useId, watch } from "vue";
 
-import {
-  useIsMobile,
-  usePriorityValues,
-  useSimpleLocale,
-} from '/@/vben/composables';
-import { Expand, Shrink } from '/@/vben/icons';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  VbenButton,
-  VbenHelpTooltip,
-  VbenIconButton,
-  VbenLoading,
-  VisuallyHidden,
-} from '/@/vben/shadcn-ui';
-import { ELEMENT_ID_MAIN_CONTENT } from '/@/vben/shared/constants';
-import { globalShareState } from '/@/vben/shared/global-state';
-import { cn } from '/@/vben/shared/utils';
+import { useIsMobile, usePriorityValues, useSimpleLocale } from "/@/vben/composables";
+import { Expand, Shrink } from "/@/vben/icons";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, VbenButton, VbenHelpTooltip, VbenIconButton, VbenLoading, VisuallyHidden } from "/@/vben/shadcn-ui";
+import { ELEMENT_Id_MAIN_CONTENT } from "/@/vben/shared/constants";
+import { globalShareState } from "/@/vben/shared/global-state";
+import { cn } from "/@/vben/shared/utils";
 
-import { useModalDraggable } from './use-modal-draggable';
+import { useModalDraggable } from "./use-modal-draggable";
 
 interface Props extends ModalProps {
   modalApi?: ExtendedModalApi;
@@ -34,7 +18,7 @@ interface Props extends ModalProps {
 
 const props = withDefaults(defineProps<Props>(), {
   appendToMain: false,
-  modalApi: undefined,
+  modalApi: undefined
 });
 
 const components = globalShareState.getComponents();
@@ -47,7 +31,7 @@ const footerRef = ref();
 
 const id = useId();
 
-provide('DISMISSABLE_MODAL_ID', id);
+provide("DISMISSABLE_MODAL_ID", id);
 
 const { $t } = useSimpleLocale();
 const { isMobile } = useIsMobile();
@@ -83,22 +67,14 @@ const {
   submitting,
   title,
   titleTooltip,
-  zIndex,
+  zIndex
 } = usePriorityValues(props, state);
 
-const shouldFullscreen = computed(
-  () => (fullscreen.value && header.value) || isMobile.value,
-);
+const shouldFullscreen = computed(() => (fullscreen.value && header.value) || isMobile.value);
 
-const shouldDraggable = computed(
-  () => draggable.value && !shouldFullscreen.value && header.value,
-);
+const shouldDraggable = computed(() => draggable.value && !shouldFullscreen.value && header.value);
 
-const { dragging, transform } = useModalDraggable(
-  dialogRef,
-  headerRef,
-  shouldDraggable,
-);
+const { dragging, transform } = useModalDraggable(dialogRef, headerRef, shouldDraggable);
 
 watch(
   () => state?.value?.isOpen,
@@ -112,7 +88,7 @@ watch(
       const { offsetX, offsetY } = transform;
       dialogRef.value.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
     }
-  },
+  }
 );
 
 watch(
@@ -121,10 +97,10 @@ watch(
     if ((s || l) && wrapperRef.value) {
       wrapperRef.value.scrollTo({
         // behavior: 'smooth',
-        top: 0,
+        top: 0
       });
     }
-  },
+  }
 );
 
 function handleFullscreen() {
@@ -157,11 +133,7 @@ function handerOpenAutoFocus(e: Event) {
 function pointerDownOutside(e: Event) {
   const target = e.target as HTMLElement;
   const isDismissableModal = target?.dataset.dismissableModal;
-  if (
-    !closeOnClickModal.value ||
-    isDismissableModal !== id ||
-    submitting.value
-  ) {
+  if (!closeOnClickModal.value || isDismissableModal !== id || submitting.value) {
     e.preventDefault();
     e.stopPropagation();
   }
@@ -172,31 +144,22 @@ function handleFocusOutside(e: Event) {
   e.stopPropagation();
 }
 const getAppendTo = computed(() => {
-  return appendToMain.value ? `#${ELEMENT_ID_MAIN_CONTENT}` : undefined;
+  return appendToMain.value ? `#${ELEMENT_Id_MAIN_CONTENT}` : undefined;
 });
 </script>
 <template>
-  <Dialog
-    :modal="false"
-    :open="state?.isOpen"
-    @update:open="() => (!submitting ? modalApi?.close() : undefined)"
-  >
+  <Dialog :modal="false" :open="state?.isOpen" @update:open="() => (!submitting ? modalApi?.close() : undefined)">
     <DialogContent
       ref="contentRef"
       :append-to="getAppendTo"
       :class="
-        cn(
-          'left-0 right-0 top-[10vh] mx-auto flex max-h-[80%] w-[520px] flex-col p-0 sm:rounded-[var(--radius)]',
-          modalClass,
-          {
-            'border-border border': bordered,
-            'shadow-3xl': !bordered,
-            'left-0 top-0 size-full max-h-full !translate-x-0 !translate-y-0':
-              shouldFullscreen,
-            'top-1/2 !-translate-y-1/2': centered && !shouldFullscreen,
-            'duration-300': !dragging,
-          },
-        )
+        cn('left-0 right-0 top-[10vh] mx-auto flex max-h-[80%] w-[520px] flex-col p-0 sm:rounded-[var(--radius)]', modalClass, {
+          'border-border border': bordered,
+          'shadow-3xl': !bordered,
+          'left-0 top-0 size-full max-h-full !translate-x-0 !translate-y-0': shouldFullscreen,
+          'top-1/2 !-translate-y-1/2': centered && !shouldFullscreen,
+          'duration-300': !dragging
+        })
       "
       :modal="modal"
       :open="state?.isOpen"
@@ -221,9 +184,9 @@ const getAppendTo = computed(() => {
             {
               'border-b': bordered,
               hidden: !header,
-              'cursor-move select-none': shouldDraggable,
+              'cursor-move select-none': shouldDraggable
             },
-            headerClass,
+            headerClass
           )
         "
       >
@@ -252,15 +215,11 @@ const getAppendTo = computed(() => {
         ref="wrapperRef"
         :class="
           cn('relative min-h-40 flex-1 overflow-y-auto p-3', contentClass, {
-            'overflow-hidden': showLoading || submitting,
+            'overflow-hidden': showLoading || submitting
           })
         "
       >
-        <VbenLoading
-          v-if="showLoading || submitting"
-          class="size-full h-auto min-h-full"
-          spinning
-        />
+        <VbenLoading v-if="showLoading || submitting" class="size-full h-auto min-h-full" spinning />
         <slot></slot>
       </div>
 
@@ -280,35 +239,23 @@ const getAppendTo = computed(() => {
           cn(
             'flex-row items-center justify-end p-2',
             {
-              'border-t': bordered,
+              'border-t': bordered
             },
-            footerClass,
+            footerClass
           )
         "
       >
         <slot name="prepend-footer"></slot>
         <slot name="footer">
-          <component
-            :is="components.DefaultButton || VbenButton"
-            v-if="showCancelButton"
-            variant="ghost"
-            :disabled="submitting"
-            @click="() => modalApi?.onCancel()"
-          >
+          <component :is="components.DefaultButton || VbenButton" v-if="showCancelButton" variant="ghost" :disabled="submitting" @click="() => modalApi?.onCancel()">
             <slot name="cancelText">
-              {{ cancelText || $t('cancel') }}
+              {{ cancelText || $t("cancel") }}
             </slot>
           </component>
 
-          <component
-            :is="components.PrimaryButton || VbenButton"
-            v-if="showConfirmButton"
-            :disabled="confirmDisabled"
-            :loading="confirmLoading || submitting"
-            @click="() => modalApi?.onConfirm()"
-          >
+          <component :is="components.PrimaryButton || VbenButton" v-if="showConfirmButton" :disabled="confirmDisabled" :loading="confirmLoading || submitting" @click="() => modalApi?.onConfirm()">
             <slot name="confirmText">
-              {{ confirmText || $t('confirm') }}
+              {{ confirmText || $t("confirm") }}
             </slot>
           </component>
         </slot>

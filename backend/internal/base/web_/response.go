@@ -6,6 +6,19 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+// ListResponse 表示不分页列表响应的数据结构。
+type ListResponse[T any] struct {
+	Records []T `json:"records"`
+}
+
+// PageResponse 表示统一分页响应的数据结构。
+type PageResponse[T any] struct {
+	Offset  int64 `json:"offset"`
+	Limit   int64 `json:"limit"`
+	Records []T   `json:"records"`
+	Total   int64 `json:"total"`
+}
+
 // Success returns the standard business response envelope.
 func Success(c fiber.Ctx, data any) error {
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"code": 0, "message": "成功", "data": data})
@@ -29,7 +42,7 @@ func ErrorHandler(c fiber.Ctx, err error) error {
 
 // HandleJSON 统一处理 JSON 请求体、业务调用和成功响应。
 // 业务函数只需返回数据或错误，错误交给 Fiber 的 ErrorHandler 统一转换。
-func HandleJSON[T any](action func(fiber.Ctx, *T) (any, error)) fiber.Handler {
+func HandleJSON[T any, R any](action func(fiber.Ctx, *T) (R, error)) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		var input T
 		if err := c.Bind().Body(&input); err != nil {
@@ -44,7 +57,7 @@ func HandleJSON[T any](action func(fiber.Ctx, *T) (any, error)) fiber.Handler {
 }
 
 // Handle 统一处理无请求体业务、成功响应和错误返回。
-func Handle(action func(fiber.Ctx) (any, error)) fiber.Handler {
+func Handle[R any](action func(fiber.Ctx) (R, error)) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		data, err := action(c)
 		if err != nil {

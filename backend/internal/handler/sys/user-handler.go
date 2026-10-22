@@ -6,6 +6,7 @@ import (
 	"handfree-work/octo-backup/internal/base/error_"
 	"handfree-work/octo-backup/internal/base/error_/code_"
 	"handfree-work/octo-backup/internal/base/web_"
+	"handfree-work/octo-backup/internal/models"
 	logic "handfree-work/octo-backup/internal/modules/user"
 	"handfree-work/octo-backup/internal/svc"
 
@@ -40,8 +41,8 @@ func RegisterUsers(app *fiber.App, svcCtx *svc.ServiceContext) {
 // @Failure 403 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
 // @Router /api/user/create [post]
-func createUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.CreateUserInput) (any, error) {
-	return func(c fiber.Ctx, input *logic.CreateUserInput) (any, error) {
+func createUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.CreateUserInput) (*models.SysUser, error) {
+	return func(c fiber.Ctx, input *logic.CreateUserInput) (*models.SysUser, error) {
 		defer web_.AuditLog(c, "创建用户")
 		return logic.NewUserService(c.Context(), svcCtx).Create(input)
 	}
@@ -58,8 +59,8 @@ func createUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.CreateUserInp
 // @Failure 403 {object} ErrorResponse
 // @Router /api/user/list [post]
 // @Router /api/user/page [post]
-func listUsers(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.UserPageQuery) (any, error) {
-	return func(c fiber.Ctx, query *logic.UserPageQuery) (any, error) {
+func listUsers(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.UserPageQuery) (*logic.UserPageResult, error) {
+	return func(c fiber.Ctx, query *logic.UserPageQuery) (*logic.UserPageResult, error) {
 		return logic.NewUserService(c.Context(), svcCtx).FindPage(query)
 	}
 }
@@ -77,8 +78,8 @@ func listUsers(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.UserPageQuery)
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Router /api/user/info [post]
-func getUser(svcCtx *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
+func getUser(svcCtx *svc.ServiceContext) func(fiber.Ctx) (*models.SysUser, error) {
+	return func(c fiber.Ctx) (*models.SysUser, error) {
 		id, err := parseUserId(c)
 		if err != nil {
 			return nil, error_.NewCodeTextError(code_.ParamError, "用户 Id 无效")
@@ -102,8 +103,8 @@ func getUser(svcCtx *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Router /api/user/update [post]
-func updateUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.UpdateUserInput) (any, error) {
-	return func(c fiber.Ctx, input *logic.UpdateUserInput) (any, error) {
+func updateUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.UpdateUserInput) (*models.SysUser, error) {
+	return func(c fiber.Ctx, input *logic.UpdateUserInput) (*models.SysUser, error) {
 		defer web_.AuditLog(c, "更新用户")
 		id, err := parseUserId(c)
 		if err != nil {
@@ -136,8 +137,8 @@ func updateUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *logic.UpdateUserInp
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Router /api/user/delete [post]
-func deleteUser(svcCtx *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
+func deleteUser(svcCtx *svc.ServiceContext) func(fiber.Ctx) (fiber.Map, error) {
+	return func(c fiber.Ctx) (fiber.Map, error) {
 		defer web_.AuditLog(c, "删除用户")
 		id, err := parseUserId(c)
 		if err != nil {
@@ -151,7 +152,7 @@ func deleteUser(svcCtx *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 }
 
 type batchDeleteInput struct {
-	IDs []int64 `json:"ids"`
+	Ids []int64 `json:"ids"`
 }
 
 // batchDeleteUser godoc
@@ -167,14 +168,14 @@ type batchDeleteInput struct {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Router /api/user/batchDelete [post]
-func batchDeleteUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *batchDeleteInput) (any, error) {
-	return func(c fiber.Ctx, input *batchDeleteInput) (any, error) {
+func batchDeleteUser(svcCtx *svc.ServiceContext) func(fiber.Ctx, *batchDeleteInput) (fiber.Map, error) {
+	return func(c fiber.Ctx, input *batchDeleteInput) (fiber.Map, error) {
 		defer web_.AuditLog(c, "批量删除用户")
-		if len(input.IDs) == 0 {
+		if len(input.Ids) == 0 {
 			return nil, error_.NewCodeTextError(code_.ParamError, "用户 Id 不能为空")
 		}
 		service := logic.NewUserService(c.Context(), svcCtx)
-		for _, id := range input.IDs {
+		for _, id := range input.Ids {
 			if err := service.Delete(id); err != nil {
 				return nil, err
 			}

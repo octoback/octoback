@@ -5,6 +5,7 @@ import (
 	"handfree-work/octo-backup/internal/base/error_"
 	"handfree-work/octo-backup/internal/base/error_/code_"
 	"handfree-work/octo-backup/internal/base/web_"
+	"handfree-work/octo-backup/internal/modules/plugin"
 	logic "handfree-work/octo-backup/internal/modules/plugin/service"
 	"handfree-work/octo-backup/internal/svc"
 	"strconv"
@@ -22,7 +23,7 @@ func RegisterPlugin(app *fiber.App, s *svc.ServiceContext) {
 	web_.RegisterRoutes(instances, s.Auth,
 		web_.Route{Path: "/page", Permission: web_.Read, Handler: web_.HandleJSON(pluginInstancePage(s))},
 		web_.Route{Path: "/info", Permission: web_.Read, Handler: web_.Handle(pluginInstanceInfo(s))},
-		web_.Route{Path: "/simpleByIds", Permission: web_.Read, Handler: web_.HandleJSON(pluginInstanceSimpleByIDs(s))},
+		web_.Route{Path: "/simpleByIds", Permission: web_.Read, Handler: web_.HandleJSON(pluginInstanceSimpleByIds(s))},
 		web_.Route{Path: "/create", Permission: web_.Write, Handler: web_.HandleJSON(pluginInstanceCreate(s))},
 		web_.Route{Path: "/update", Permission: web_.Write, Handler: web_.HandleJSON(pluginInstanceUpdate(s))},
 		web_.Route{Path: "/action", Permission: web_.Write, Handler: web_.HandleJSON(pluginInstanceAction(s))},
@@ -39,8 +40,8 @@ func RegisterPlugin(app *fiber.App, s *svc.ServiceContext) {
 // @Param id query int64 true "插件 Id"
 // @Success 200 {object} map[string]interface{}
 // @Router /api/plugin/instance/info [post]
-func pluginInstanceInfo(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
+func pluginInstanceInfo(s *svc.ServiceContext) func(fiber.Ctx) (map[string]any, error) {
+	return func(c fiber.Ctx) (map[string]any, error) {
 		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
 		if err != nil {
 			return nil, error_.NewCodeTextError(code_.ParamError, "插件 Id 无效")
@@ -49,7 +50,7 @@ func pluginInstanceInfo(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 	}
 }
 
-// pluginInstanceSimpleByIDs godoc
+// pluginInstanceSimpleByIds godoc
 // @Summary 按 Id 批量获取插件简要信息
 // @Tags 插件
 // @Accept json
@@ -58,17 +59,17 @@ func pluginInstanceInfo(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 // @Param request body object{ids=[]int64} true "插件 Id 列表"
 // @Success 200 {array} map[string]interface{}
 // @Router /api/plugin/instance/simpleByIds [post]
-type pluginInstanceIDsRequest struct {
-	IDs []int64 `json:"ids"`
+type pluginInstanceIdsRequest struct {
+	Ids []int64 `json:"ids"`
 }
 
-func pluginInstanceSimpleByIDs(s *svc.ServiceContext) func(fiber.Ctx, *pluginInstanceIDsRequest) (any, error) {
-	return func(c fiber.Ctx, q *pluginInstanceIDsRequest) (any, error) {
-		return logic.NewPluginInstanceService(c.Context(), s).GetSimpleByIDs(q.IDs)
+func pluginInstanceSimpleByIds(s *svc.ServiceContext) func(fiber.Ctx, *pluginInstanceIdsRequest) ([]map[string]any, error) {
+	return func(c fiber.Ctx, q *pluginInstanceIdsRequest) ([]map[string]any, error) {
+		return logic.NewPluginInstanceService(c.Context(), s).GetSimpleByIds(q.Ids)
 	}
 }
-func pluginInstanceUpdate(s *svc.ServiceContext) func(fiber.Ctx, *logic.PluginInstanceInput) (any, error) {
-	return func(c fiber.Ctx, in *logic.PluginInstanceInput) (any, error) {
+func pluginInstanceUpdate(s *svc.ServiceContext) func(fiber.Ctx, *logic.PluginInstanceInput) (map[string]any, error) {
+	return func(c fiber.Ctx, in *logic.PluginInstanceInput) (map[string]any, error) {
 		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
 		if err != nil {
 			return nil, error_.NewCodeTextError(code_.ParamError, "插件 Id 无效")
@@ -83,18 +84,18 @@ type pluginMetadataRequest struct {
 	Name string `json:"name"`
 }
 
-func pluginMetadata(s *svc.ServiceContext) func(fiber.Ctx, *pluginMetadataRequest) (any, error) {
-	return func(c fiber.Ctx, q *pluginMetadataRequest) (any, error) {
+func pluginMetadata(s *svc.ServiceContext) func(fiber.Ctx, *pluginMetadataRequest) ([]plugin.Metadata, error) {
+	return func(c fiber.Ctx, q *pluginMetadataRequest) ([]plugin.Metadata, error) {
 		return logic.NewPluginInstanceService(c.Context(), s).Metadata(q.Type, q.Name), nil
 	}
 }
-func pluginInstancePage(s *svc.ServiceContext) func(fiber.Ctx, *logic.PluginInstancePageQuery) (any, error) {
-	return func(c fiber.Ctx, q *logic.PluginInstancePageQuery) (any, error) {
+func pluginInstancePage(s *svc.ServiceContext) func(fiber.Ctx, *logic.PluginInstancePageQuery) (*logic.PluginInstancePageResult, error) {
+	return func(c fiber.Ctx, q *logic.PluginInstancePageQuery) (*logic.PluginInstancePageResult, error) {
 		return logic.NewPluginInstanceService(c.Context(), s).Page(q)
 	}
 }
-func pluginInstanceCreate(s *svc.ServiceContext) func(fiber.Ctx, *logic.PluginInstanceInput) (any, error) {
-	return func(c fiber.Ctx, in *logic.PluginInstanceInput) (any, error) {
+func pluginInstanceCreate(s *svc.ServiceContext) func(fiber.Ctx, *logic.PluginInstanceInput) (map[string]any, error) {
+	return func(c fiber.Ctx, in *logic.PluginInstanceInput) (map[string]any, error) {
 		defer web_.AuditLog(c, fmt.Sprintf("创建插件实例(%v)", in.PluginName))
 		return logic.NewPluginInstanceService(c.Context(), s).Create(in)
 	}
@@ -112,8 +113,8 @@ func pluginInstanceAction(s *svc.ServiceContext) func(fiber.Ctx, *pluginInstance
 		return logic.NewPluginInstanceService(c.Context(), s).Action(in.Id, in.Action, in.Params)
 	}
 }
-func pluginInstanceDelete(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
+func pluginInstanceDelete(s *svc.ServiceContext) func(fiber.Ctx) (fiber.Map, error) {
+	return func(c fiber.Ctx) (fiber.Map, error) {
 		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
 		if err != nil {
 			return nil, error_.NewCodeTextError(code_.ParamError, "插件 Id 无效")

@@ -43,7 +43,7 @@ export default function ({ context, crudExpose }: CreateCrudOptionsProps<PluginI
   const dynamicFieldKeys = new Set<string>();
   const goRepository = (row: PluginInstance) => (window.location.hash = `#/sys/repository/${row.id}`);
   const columns: Record<string, any> = {
-    id: { title: "ID", type: "text", form: { show: false }, column: { width: 80 } },
+    id: { title: "Id", type: "text", form: { show: false }, column: { width: 80 } },
     name: {
       title: "名称",
       type: "text",

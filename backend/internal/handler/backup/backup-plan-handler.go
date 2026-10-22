@@ -40,14 +40,14 @@ func RegisterRestoreTask(app *fiber.App, s *svc.ServiceContext) {
 	)
 }
 
-func restoreTaskCreate(s *svc.ServiceContext) func(fiber.Ctx, *logic.RestoreTaskInput) (any, error) {
-	return func(c fiber.Ctx, input *logic.RestoreTaskInput) (any, error) {
+func restoreTaskCreate(s *svc.ServiceContext) func(fiber.Ctx, *logic.RestoreTaskInput) (map[string]any, error) {
+	return func(c fiber.Ctx, input *logic.RestoreTaskInput) (map[string]any, error) {
 		return logic.NewRestoreTaskService(c.Context(), s).Create(input)
 	}
 }
 
-func restoreTaskInfo(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
+func restoreTaskInfo(s *svc.ServiceContext) func(fiber.Ctx) (map[string]any, error) {
+	return func(c fiber.Ctx) (map[string]any, error) {
 		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
 		if err != nil {
 			return nil, error_.NewCodeTextError(code_.ParamError, "恢复任务 Id 无效")
@@ -55,13 +55,13 @@ func restoreTaskInfo(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 		return logic.NewRestoreTaskService(c.Context(), s).Info(id)
 	}
 }
-func restoreTaskPage(s *svc.ServiceContext) func(fiber.Ctx, *logic.RestoreTaskPageQuery) (any, error) {
-	return func(c fiber.Ctx, q *logic.RestoreTaskPageQuery) (any, error) {
+func restoreTaskPage(s *svc.ServiceContext) func(fiber.Ctx, *logic.RestoreTaskPageQuery) (*logic.RestoreTaskPageResult, error) {
+	return func(c fiber.Ctx, q *logic.RestoreTaskPageQuery) (*logic.RestoreTaskPageResult, error) {
 		return logic.NewRestoreTaskService(c.Context(), s).Page(q)
 	}
 }
-func restoreTaskLog(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
+func restoreTaskLog(s *svc.ServiceContext) func(fiber.Ctx) (map[string]any, error) {
+	return func(c fiber.Ctx) (map[string]any, error) {
 		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
 		if err != nil {
 			return nil, error_.NewCodeTextError(code_.ParamError, "恢复任务 Id 无效")
@@ -69,8 +69,8 @@ func restoreTaskLog(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 		return logic.NewRestoreTaskService(c.Context(), s).LogContent(id)
 	}
 }
-func restoreTaskDelete(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
+func restoreTaskDelete(s *svc.ServiceContext) func(fiber.Ctx) (fiber.Map, error) {
+	return func(c fiber.Ctx) (fiber.Map, error) {
 		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
 		if err != nil {
 			return nil, error_.NewCodeTextError(code_.ParamError, "恢复任务 Id 无效")
@@ -81,8 +81,8 @@ func restoreTaskDelete(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 		return fiber.Map{}, nil
 	}
 }
-func backupPlanList(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
+func backupPlanList(s *svc.ServiceContext) func(fiber.Ctx) ([]logic.BackupPlanSimple, error) {
+	return func(c fiber.Ctx) ([]logic.BackupPlanSimple, error) {
 		return logic.NewBackupPlanService(c.Context(), s).List()
 	}
 }
@@ -96,8 +96,8 @@ func backupPlanList(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 // @Param id query int true "运行记录 Id"
 // @Success 200 {object} map[string]interface{}
 // @Router /api/plan/run/log [post]
-func backupPlanLogContent(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
+func backupPlanLogContent(s *svc.ServiceContext) func(fiber.Ctx) (map[string]any, error) {
+	return func(c fiber.Ctx) (map[string]any, error) {
 		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
 		if err != nil {
 			return nil, error_.NewCodeTextError(code_.ParamError, "运行记录 Id 无效")
@@ -105,13 +105,13 @@ func backupPlanLogContent(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 		return logic.NewBackupPlanService(c.Context(), s).LogContent(id)
 	}
 }
-func backupPlanLogPage(s *svc.ServiceContext) func(fiber.Ctx, *logic.BackupTaskPageQuery) (any, error) {
-	return func(c fiber.Ctx, q *logic.BackupTaskPageQuery) (any, error) {
+func backupPlanLogPage(s *svc.ServiceContext) func(fiber.Ctx, *logic.BackupTaskPageQuery) (*logic.BackupTaskPageResult, error) {
+	return func(c fiber.Ctx, q *logic.BackupTaskPageQuery) (*logic.BackupTaskPageResult, error) {
 		return logic.NewBackupPlanService(c.Context(), s).LogPage(q)
 	}
 }
-func backupPlanRun(s *svc.ServiceContext) func(fiber.Ctx, *struct{}) (any, error) {
-	return func(c fiber.Ctx, _ *struct{}) (any, error) {
+func backupPlanRun(s *svc.ServiceContext) func(fiber.Ctx, *struct{}) (map[string]any, error) {
+	return func(c fiber.Ctx, _ *struct{}) (map[string]any, error) {
 		defer web_.AuditLog(c, "执行备份计划")
 		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
 		if err != nil {
@@ -120,8 +120,8 @@ func backupPlanRun(s *svc.ServiceContext) func(fiber.Ctx, *struct{}) (any, error
 		return logic.NewBackupPlanService(c.Context(), s).Run(id)
 	}
 }
-func backupPlanLog(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
+func backupPlanLog(s *svc.ServiceContext) func(fiber.Ctx) (map[string]any, error) {
+	return func(c fiber.Ctx) (map[string]any, error) {
 		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
 		if err != nil {
 			return nil, error_.NewCodeTextError(code_.ParamError, "运行记录 Id 无效")
@@ -129,13 +129,13 @@ func backupPlanLog(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 		return logic.NewBackupPlanService(c.Context(), s).Log(id)
 	}
 }
-func backupPlanPage(s *svc.ServiceContext) func(fiber.Ctx, *logic.BackupPlanPageQuery) (any, error) {
-	return func(c fiber.Ctx, q *logic.BackupPlanPageQuery) (any, error) {
+func backupPlanPage(s *svc.ServiceContext) func(fiber.Ctx, *logic.BackupPlanPageQuery) (*logic.BackupPlanPageResult, error) {
+	return func(c fiber.Ctx, q *logic.BackupPlanPageQuery) (*logic.BackupPlanPageResult, error) {
 		return logic.NewBackupPlanService(c.Context(), s).Page(q)
 	}
 }
-func backupPlanInfo(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
+func backupPlanInfo(s *svc.ServiceContext) func(fiber.Ctx) (map[string]any, error) {
+	return func(c fiber.Ctx) (map[string]any, error) {
 		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
 		if err != nil {
 			return nil, error_.NewCodeTextError(code_.ParamError, "备份计划 Id 无效")
@@ -143,14 +143,14 @@ func backupPlanInfo(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
 		return logic.NewBackupPlanService(c.Context(), s).Info(id)
 	}
 }
-func backupPlanCreate(s *svc.ServiceContext) func(fiber.Ctx, *logic.BackupPlanInput) (any, error) {
-	return func(c fiber.Ctx, in *logic.BackupPlanInput) (any, error) {
+func backupPlanCreate(s *svc.ServiceContext) func(fiber.Ctx, *logic.BackupPlanInput) (map[string]any, error) {
+	return func(c fiber.Ctx, in *logic.BackupPlanInput) (map[string]any, error) {
 		defer web_.AuditLog(c, "创建备份计划")
 		return logic.NewBackupPlanService(c.Context(), s).Create(in)
 	}
 }
-func backupPlanUpdate(s *svc.ServiceContext) func(fiber.Ctx, *logic.BackupPlanInput) (any, error) {
-	return func(c fiber.Ctx, in *logic.BackupPlanInput) (any, error) {
+func backupPlanUpdate(s *svc.ServiceContext) func(fiber.Ctx, *logic.BackupPlanInput) (map[string]any, error) {
+	return func(c fiber.Ctx, in *logic.BackupPlanInput) (map[string]any, error) {
 		defer web_.AuditLog(c, "更新备份计划")
 		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
 		if err != nil {
@@ -159,8 +159,8 @@ func backupPlanUpdate(s *svc.ServiceContext) func(fiber.Ctx, *logic.BackupPlanIn
 		return logic.NewBackupPlanService(c.Context(), s).Update(id, in)
 	}
 }
-func backupPlanDelete(s *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
+func backupPlanDelete(s *svc.ServiceContext) func(fiber.Ctx) (fiber.Map, error) {
+	return func(c fiber.Ctx) (fiber.Map, error) {
 		defer web_.AuditLog(c, "删除备份计划")
 		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
 		if err != nil {

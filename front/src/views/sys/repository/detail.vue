@@ -63,7 +63,7 @@
               <div class="section-title">快照信息</div>
               <div class="summary-grid snapshot-info-grid">
                 <div class="summary-item">
-                  <span>Snapshot ID</span>
+                  <span>Snapshot Id</span>
                   <strong><fs-copyable :model-value="selectedSnapshot.id" inline :button="{ text: '复制', showOnHover: true }" /></strong>
                 </div>
                 <div class="summary-item">

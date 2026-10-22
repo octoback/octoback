@@ -77,7 +77,7 @@ type PluginInstancePageResult struct {
 	Total   int64            `json:"total"`
 }
 
-func (s *PluginInstanceService) GetSimpleByIDs(ids []int64) ([]map[string]any, error) {
+func (s *PluginInstanceService) GetSimpleByIds(ids []int64) ([]map[string]any, error) {
 	if len(ids) == 0 {
 		return []map[string]any{}, nil
 	}

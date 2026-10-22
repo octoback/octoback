@@ -150,8 +150,8 @@ func pluginInstanceSnapshotBrowser(svcCtx *svc.ServiceContext) func(fiber.Ctx) (
 // @Param snapshotId query string true "Restic 快照 Id"
 // @Success 200 {object} map[string]interface{}
 // @Router /api/plugin/instance/forget-snapshot [post]
-func pluginInstanceForgetSnapshot(svcCtx *svc.ServiceContext) func(fiber.Ctx) (any, error) {
-	return func(c fiber.Ctx) (any, error) {
+func pluginInstanceForgetSnapshot(svcCtx *svc.ServiceContext) func(fiber.Ctx) (fiber.Map, error) {
+	return func(c fiber.Ctx) (fiber.Map, error) {
 		repositoryId, err := parseRepositoryId(c)
 		if err != nil {
 			return nil, err

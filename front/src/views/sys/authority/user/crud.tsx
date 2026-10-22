@@ -12,7 +12,7 @@ export default function (_props: CreateCrudOptionsProps): CreateCrudOptionsRet {
       },
       rowHandle: { fixed: "right" },
       columns: {
-        id: { title: "ID", type: "text", form: { show: false }, column: { width: 80 } },
+        id: { title: "Id", type: "text", form: { show: false }, column: { width: 80 } },
         username: { title: "用户名", type: "text", search: { show: true }, form: { rules: [{ required: true, message: "请输入用户名" }] }, editForm: { component: { disabled: true } } },
         password: { title: "密码", type: "text", column: { show: false }, form: { rules: [{ min: 6, message: "密码至少 6 位" }], component: { showPassword: true }, helper: "编辑时留空表示不修改" } },
         nickName: { title: "昵称", type: "text" },

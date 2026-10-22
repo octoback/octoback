@@ -8,8 +8,8 @@ func NewBaseModel(id *int64) BaseModel {
 	return BaseModel{Id: id}
 }
 
-type IDao[T BaseModel] interface {
-	NewEntity(id int64) IDao[T]
+type IdDao[T BaseModel] interface {
+	NewEntity(id int64) IdDao[T]
 }
 
 type BaseModel struct {

@@ -584,7 +584,7 @@ func TestPluginCreateUpdateAndConcurrentMasterKeyInitialization(t *testing.T) {
 	if err != nil || info["config"].(map[string]any)["account"] != "account-1" {
 		t.Fatalf("plugin info = %#v, error = %v; want complete config", info, err)
 	}
-	simple, err := service.GetSimpleByIDs([]int64{id, id + 100})
+	simple, err := service.GetSimpleByIds([]int64{id, id + 100})
 	if err != nil || len(simple) != 1 || simple[0]["name"] != "腾讯云" || simple[0]["pluginName"] != "access.test" || simple[0]["icon"] != "" || simple[0]["config"] != nil {
 		t.Fatalf("simple plugins = %#v, error = %v", simple, err)
 	}

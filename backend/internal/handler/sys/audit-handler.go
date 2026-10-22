@@ -24,8 +24,8 @@ func RegisterAudit(app *fiber.App, s *svc.ServiceContext) {
 // @Param request body logic.AuditLogPageQuery true "分页和筛选条件"
 // @Success 200 {object} logic.AuditLogPageResult
 // @Router /api/audit/page [post]
-func auditPage(s *svc.ServiceContext) func(fiber.Ctx, *logic.AuditLogPageQuery) (any, error) {
-	return func(c fiber.Ctx, q *logic.AuditLogPageQuery) (any, error) {
+func auditPage(s *svc.ServiceContext) func(fiber.Ctx, *logic.AuditLogPageQuery) (*logic.AuditLogPageResult, error) {
+	return func(c fiber.Ctx, q *logic.AuditLogPageQuery) (*logic.AuditLogPageResult, error) {
 		return logic.NewService(c.Context(), s).Page(q)
 	}
 }
